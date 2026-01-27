@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Favoritos | Trading RSI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #0d6efd;
+      --secondary-color: #6c757d;
+      --dark-bg: #1a1d20;
+      --light-bg: #f8f9fa;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--light-bg);
+      color: #333;
+    }
+
+    header {
+      background: linear-gradient(135deg, #212529 0%, #343a40 100%);
+      padding: 0.75rem 0;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .navbar-brand {
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      font-size: 1.5rem;
+    }
+
+    .nav-link {
+      font-weight: 500;
+      transition: all 0.3s ease;
+      opacity: 0.8;
+    }
+
+    .nav-link:hover {
+      opacity: 1;
+      transform: translateY(-1px);
+    }
+
+    .nav-link.active {
+      color: #fff !important;
+      font-weight: 700;
+      opacity: 1;
+    }
+
+    .table-container {
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+    }
+
+    .table thead th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+      padding: 1rem;
+    }
+
+    .table tbody td {
+      padding: 1rem;
+      font-size: 0.9rem;
+      vertical-align: middle;
+    }
+
+    .symbol-link {
+      color: var(--primary-color);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .symbol-link:hover {
+      text-decoration: underline;
+    }
+
+    .btn {
+      border-radius: 8px;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+    }
+  </style>
+</head>
+
+<body class="bg-light">
+  <header>
+    <nav class="navbar navbar-expand-lg navbar-dark container">
+      <a class="navbar-brand" href="/">📈 TRADING<span class="text-primary">RSI</span></a>
+      <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link active" href="/favoritos">Favoritos</a></li>
+        </ul>
+      </div>
+    </nav>
+  </header>
+
+  <div class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h3 class="fw-bold mb-0">⭐ Stocks Favoritos</h3>
+      <div>
+        <button class="btn btn-outline-secondary btn-sm" onclick="loadFav()">🔁 Recargar</button>
+      </div>
+    </div>
+
+    <!-- Formulario Manual -->
+    <div class="card mb-4 border-0">
+      <div class="card-body p-4">
+        <h5 class="fw-bold mb-3">➕ Agregar Stock Manualmente</h5>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <input type="text" id="manSymbol" class="form-control" placeholder="Símbolo (ej: TSLA)" />
+          </div>
+          <div class="col-md-3">
+            <input type="number" id="manAlert" step="0.01" class="form-control" placeholder="Valor Alerta" />
+          </div>
+          <div class="col-md-3">
+            <select id="manDir" class="form-select">
+              <option value="encima">encima</option>
+              <option value="debajo">debajo</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <button class="btn btn-primary w-100" onclick="addManual()">Agregar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-container shadow-sm border-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width: 50px;">DEL</th>
+              <th>Símbolo</th>
+              <th>Valor Actual</th>
+              <th>Valor Alerta</th>
+              <th>Dirección</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="fav-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    async function loadFav() {
+      const r = await fetch("/api/favoritos_data");
+      const d = await r.json();
+      const tb = document.getElementById("fav-body");
+      tb.innerHTML = "";
+
+      d.forEach((row) => {
+        const tr = document.createElement("tr");
+        const symbol = row[0];
+        const current_val = row[1];
+        const alert_val = row[2];
+        const alert_dir = row[3];
+        const tvUrl = `https://es.tradingview.com/chart/vODPKhks/?symbol=${symbol}`;
+
+        tr.innerHTML = `
+          <td><button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delFav('${symbol}')">×</button></td>
+          <td><a href="${tvUrl}" target="_blank" class="symbol-link">${symbol}</a></td>
+          <td><input type="number" step="0.01" class="form-control form-control-sm" id="curr-${symbol}" value="${current_val}"></td>
+          <td><input type="number" step="0.01" class="form-control form-control-sm" id="alert-${symbol}" value="${alert_val}"></td>
+          <td>
+            <select class="form-select form-select-sm" id="dir-${symbol}">
+              <option value="encima" ${alert_dir === 'encima' ? 'selected' : ''}>encima</option>
+              <option value="debajo" ${alert_dir === 'debajo' ? 'selected' : ''}>debajo</option>
+            </select>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="updateFav('${symbol}')">Actualizar</button>
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+    }
+
+    async function addManual() {
+      const symbol = document.getElementById('manSymbol').value;
+      const alert_value = document.getElementById('manAlert').value;
+      const direction = document.getElementById('manDir').value;
+
+      if (!symbol || !alert_value) return alert("Completa los campos");
+
+      const r = await fetch("/api/add_manual_favorite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, alert_value, direction })
+      });
+      const res = await r.json();
+      alert(res.message);
+      loadFav();
+    }
+
+    async function updateFav(symbol) {
+      const current_value = document.getElementById(`curr-${symbol}`).value;
+      const alert_value = document.getElementById(`alert-${symbol}`).value;
+      const alert_direction = document.getElementById(`dir-${symbol}`).value;
+
+      const r = await fetch("/api/update_favorite_values", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, current_value, alert_value, alert_direction })
+      });
+
+    }
+
+    async function delFav(sym) {
+      if (!confirm(`¿Eliminar ${sym}?`)) return;
+      await fetch(`/api/favoritos/${sym}`, { method: "DELETE" });
+      loadFav();
+    }
+
+    window.onload = loadFav;
+  </script>
+</body>
+
+</html>

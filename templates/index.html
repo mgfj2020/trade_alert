@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade Alert - RSI 4H Scanner</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --secondary: #a855f7;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text: #f8fafc;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: var(--text);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p {
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            padding: 2rem;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-label:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        button {
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .status {
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            padding: 10px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .status.success {
+            display: block;
+            background: rgba(34, 197, 94, 0.1);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .status.error {
+            display: block;
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .actions {
+            margin-top: 2rem;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .results-section {
+            margin-top: 3rem;
+            width: 100%;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 16px;
+            overflow: hidden;
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.05);
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .rsi-badge {
+            background: rgba(99, 102, 241, 0.2);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: #818cf8;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Trade Scanner</h1>
+        <p>Sube tu archivo CSV con la columna 'symbol'.</p>
+
+        <form id="uploadForm" class="upload-section">
+            <label for="csvFile" class="file-label" id="dropArea">
+                <span id="fileName">Haz clic para seleccionar o suelta tu CSV aquí</span>
+                <input type="file" id="csvFile" name="file" accept=".csv" required>
+            </label>
+            <button type="submit">Subir y Analizar</button>
+        </form>
+
+        <div id="status" class="status"></div>
+
+        <div class="actions">
+            <button id="scanBtn"
+                style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">Escanear
+                RSI_4H</button>
+            <button id="refreshBtn"
+                style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">Ver
+                Resultados</button>
+        </div>
+
+        <div id="resultsSection" class="results-section">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Símbolo</th>
+                        <th>RSI 4H</th>
+                        <th>Fecha/Hora (UTC)</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('csvFile');
+        const fileName = document.getElementById('fileName');
+        const status = document.getElementById('status');
+        const scanBtn = document.getElementById('scanBtn');
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                fileName.textContent = e.target.files[0].name;
+            }
+        });
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+            status.textContent = "Subiendo...";
+            status.className = "status";
+            status.style.display = "block";
+
+            try {
+                const response = await fetch('/upload-csv', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    status.textContent = result.message;
+                    status.className = "status success";
+                } else {
+                    status.textContent = result.error || "Error al subir";
+                    status.className = "status error";
+                }
+            } catch (err) {
+                status.textContent = "Error de red";
+                status.className = "status error";
+            }
+        };
+
+        scanBtn.onclick = async () => {
+            status.textContent = "Escaneando RSI 4H... Esto puede tardar unos minutos.";
+            status.className = "status";
+            status.style.display = "block";
+
+            try {
+                const response = await fetch('/scan-rsi', { method: 'POST' });
+                const result = await response.json();
+                if (response.ok) {
+                    status.textContent = result.message;
+                    status.className = "status success";
+                    loadResults();
+                } else {
+                    status.textContent = result.error || "Error al escanear";
+                    status.className = "status error";
+                }
+            } catch (err) {
+                status.textContent = "Error de red";
+                status.className = "status error";
+            }
+        };
+
+        const refreshBtn = document.getElementById('refreshBtn');
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsBody = document.getElementById('resultsBody');
+
+        async function loadResults() {
+            try {
+                const response = await fetch('/results');
+                const data = await response.json();
+
+                if (data.length > 0) {
+                    resultsSection.style.display = "block";
+                    resultsBody.innerHTML = data.map(r => `
+                        <tr>
+                            <td><strong>${r.symbol}</strong></td>
+                            <td><span class="rsi-badge">${r.rsi}</span></td>
+                            <td style="font-size: 0.8rem; color: #94a3b8;">${r.time}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    resultsSection.style.display = "none";
+                }
+            } catch (err) {
+                console.error("Error cargando resultados", err);
+            }
+        }
+
+        refreshBtn.onclick = loadResults;
+        loadResults(); // Cargar al inicio
+    </script>
+</body>
+
+</html>
