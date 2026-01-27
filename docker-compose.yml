@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # Base de Datos local para desarrollo
+  db:
+    image: postgres:15-alpine
+    container_name: trade_alert_db
+    restart: always
+    environment:
+      POSTGRES_USER: user_alert
+      POSTGRES_PASSWORD: password_alert
+      POSTGRES_DB: trade_database
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # La aplicación Web (API y Panel) con RECARGA EN VIVO
+  web:
+    build: .
+    container_name: trade_alert_web
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      # MAPEAMOS TU CÓDIGO ACTUAL AL CONTENEDOR PARA DESARROLLO EN VIVO
+      - .:/app
+    environment:
+      - PORT=8080
+      - DATABASE_URL=postgresql://user_alert:password_alert@db:5432/trade_database
+      - POLYGON_API_KEY=${POLYGON_API_KEY}
+      - STOCK_ALERT=${STOCK_ALERT}
+      - START_SCHEDULER=true
+      - TIMEZONE_UTC=${TIMEZONE_UTC:-0}
+    # Comando para desarrollo con recarga automática
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload
+    depends_on:
+      - db
+
+  # Ejemplo de Job de alertas (se puede correr manualmente)
+  # docker-compose run alert-job
+  alert-job:
+    build: .
+    container_name: trade_alert_job
+    environment:
+      - DATABASE_URL=postgresql://user_alert:password_alert@db:5432/trade_database
+      - POLYGON_API_KEY=${POLYGON_API_KEY}
+      - STOCK_ALERT=${STOCK_ALERT}
+      - RUN_ONCE=true
+    command: ["python", "-m", "src.alert_scheduler"]
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

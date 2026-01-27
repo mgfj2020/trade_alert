@@ -121,13 +121,21 @@ def start_scheduler():
     return scheduler
 
 if __name__ == "__main__":
+    import os
     # Modo script independiente
-    print("--- Iniciando Script de Alertas de Stock ---")
-    sched = start_scheduler()
+    print("--- Proceso de Alertas de Stock ---")
     
-    try:
-        while True:
-            time.sleep(1)
-    except (KeyboardInterrupt, SystemExit):
-        print("Deteniendo scheduler...")
-        sched.shutdown()
+    # Si detectamos que es una ejecución de una sola vez (Cloud Run Job)
+    if os.getenv("RUN_ONCE", "false").lower() == "true":
+        print("Ejecutando escaneo único...")
+        execute()
+        print("Escaneo completado. Saliendo.")
+    else:
+        # Modo tradicional de scheduler en segundo plano
+        sched = start_scheduler()
+        try:
+            while True:
+                time.sleep(1)
+        except (KeyboardInterrupt, SystemExit):
+            print("Deteniendo scheduler...")
+            sched.shutdown()

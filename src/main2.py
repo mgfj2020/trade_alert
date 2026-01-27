@@ -18,19 +18,11 @@ from src.alert_scheduler import start_scheduler
 async def lifespan(app: FastAPI):
     # Inicializar base de datos
     init_db()
-    
-    # Iniciar el scheduler de alertas solo si se solicita explícitamente
-    # Esto es útil para separar la Web del Worker en Cloud Run
-    scheduler = None
-    if os.getenv("START_SCHEDULER", "true").lower() == "true":
-        scheduler = start_scheduler()
-        print("Scheduler iniciado dentro de la app.")
-        
+    # Iniciar el scheduler de alertas
+    scheduler = start_scheduler()
     yield
-    
     # Apagar el scheduler al cerrar la app
-    if scheduler:
-        scheduler.shutdown()
+    scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -270,5 +262,4 @@ async def delete_favorite(symbol: str):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -1,0 +1,19 @@
+# Dockerignore - Evita que archivos innecesarios entren en la imagen
+.git
+.gitignore
+.env
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.db
+databases/
+*.log
+.vscode/
+.idea/
+.DS_Store
+README.md
+docker-compose.yml
+Dockerfile

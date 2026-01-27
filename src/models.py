@@ -29,7 +29,11 @@ class Favorite(Base):
     alert_value = Column(Float, default=-1.0)
     alert_direction = Column(String, default="debajo") # "encima" o "debajo"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Configuración del motor según el tipo de base de datos
+if "sqlite" in DATABASE_URL:
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
