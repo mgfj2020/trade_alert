@@ -11,7 +11,8 @@ if os.path.exists(db_path):
         ("variation", "FLOAT DEFAULT 0.0"),
         ("rvol_1", "FLOAT DEFAULT 0.0"),
         ("rvol_2", "FLOAT DEFAULT 0.0"),
-        ("alert_direction", "VARCHAR DEFAULT 'debajo'")
+        ("alert_direction", "VARCHAR DEFAULT 'debajo'"),
+        ("timestamp", "DATETIME")
     ]
     
     for col_name, col_type in columns_to_add:

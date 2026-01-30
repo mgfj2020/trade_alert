@@ -11,11 +11,18 @@ services:
       POSTGRES_PASSWORD: password_alert
       POSTGRES_DB: trade_database
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Carpeta centralizada en el disco D para bases de datos
+      # El subdirectorio 'trade_alert' mantiene los datos aislados de otras apps
+      - D:/docker_storage/database/trade_alert:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user_alert -d trade_database"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # La aplicación Web (API y Panel) con RECARGA EN VIVO
+# Ya no necesitamos la sección 'volumes' al final porque el link es directo al disco
   web:
     build: .
     container_name: trade_alert_web
@@ -32,10 +39,10 @@ services:
       - STOCK_ALERT=${STOCK_ALERT}
       - START_SCHEDULER=true
       - TIMEZONE_UTC=${TIMEZONE_UTC:-0}
-    # Comando para desarrollo con recarga automática
     command: uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   # Ejemplo de Job de alertas (se puede correr manualmente)
   # docker-compose run alert-job
@@ -49,7 +56,6 @@ services:
       - RUN_ONCE=true
     command: ["python", "-m", "src.alert_scheduler"]
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
-volumes:
-  postgres_data:

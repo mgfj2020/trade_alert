@@ -202,8 +202,40 @@ async def get_favorites():
     db = SessionLocal()
     try:
         favs = db.query(Favorite).all()
-        # [symbol, current_value, alert_value, alert_direction]
-        return [[f.symbol, f.current_value, f.alert_value, f.alert_direction] for f in favs]
+        # [symbol, current_value, alert_value, alert_direction, timestamp]
+        return [
+            [
+                f.symbol, 
+                f.current_value, 
+                f.alert_value, 
+                f.alert_direction,
+                (f.timestamp + datetime.timedelta(hours=TIMEZONE_UTC)).strftime("%Y-%m-%d %H:%M") if f.timestamp else "-"
+            ] 
+            for f in favs
+        ]
+    finally:
+        db.close()
+
+@app.post("/api/refresh_favorites")
+async def refresh_favorites():
+    db = SessionLocal()
+    try:
+        favs = db.query(Favorite).all()
+        updated_count = 0
+        for fav in favs:
+            try:
+                df = obtener_velas_polygon(fav.symbol, "1D")
+                if not df.empty:
+                    fav.current_value = float(df["close"].iloc[-1])
+                    updated_count += 1
+            except Exception as e:
+                print(f"Error actualizando {fav.symbol}: {e}")
+                continue
+        db.commit()
+        return {"message": f"Precios actualizados para {updated_count} símbolos"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 

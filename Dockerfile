@@ -1,29 +1,48 @@
-# Usa una imagen de Python ligera
-FROM python:3.11-slim
+# --- ETAPA 1: BUILDER ---
+# Aquí instalamos todo lo necesario para compilar (pesa mucho)
+FROM python:3.11-slim AS builder
 
-# Evita que Python genere archivos .pyc y permite que los logs se vean en tiempo real
+WORKDIR /app
+
+# Evitar archivos temporales de Python
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
-# Directorio de trabajo
-WORKDIR /app
-
-# Instalar dependencias del sistema necesarias para psycopg2 (Postgres)
+# Instalamos GCC y librerías de desarrollo necesarias para compilar psycopg2
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar dependencias de Python
+# Instalamos las dependencias de Python
+# Usamos --user para que se instalen en una carpeta fácil de copiar luego
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.txt
 
-# Copiar el código del proyecto
+
+# --- ETAPA 2: RUNTIME ---
+# Esta es la imagen que realmente se subirá a la nube (será ligera)
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+# Solo instalamos la librería de ejecución de Postgres (mucho más pequeña que la de desarrollo)
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# COPIAMOS solo las librerías ya instaladas desde la etapa 'builder'
+# Esto deja fuera a GCC y todos los archivos temporales de compilación
+COPY --from=builder /root/.local /root/.local
+
+# Aseguramos que Python encuentre las librerías que copiamos
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# Copiamos solo el código de nuestra app
 COPY . .
 
-# Exponer el puerto que usará FastAPI (Cloud Run lo sobreescribe pero es buena práctica)
 EXPOSE 8080
 
-# Comando para ejecutar la aplicación
-# Usamos el módulo para que reconozca los imports de src
 CMD ["python", "-m", "src.main"]

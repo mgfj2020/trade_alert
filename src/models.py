@@ -28,6 +28,7 @@ class Favorite(Base):
     current_value = Column(Float, default=0.0)
     alert_value = Column(Float, default=-1.0)
     alert_direction = Column(String, default="debajo") # "encima" o "debajo"
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 # Configuración del motor según el tipo de base de datos
 if "sqlite" in DATABASE_URL:
