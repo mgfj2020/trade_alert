@@ -5,14 +5,15 @@ from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from src.models import SessionLocal, init_db, StockList, RSI_4H, Favorite
+from src.models import SessionLocal, init_db, StockList, RSI_4H, RSI_1D, Favorite
 from src.core.polygon_client import obtener_velas_polygon
 from src.core.indicators import calcular_rsi, procesar_indicadores
-from src.config import LIMITE_RSI_4H, TIMEZONE_UTC
+from src.config import LIMITE_RSI_1D, TIMEZONE_UTC, API_KEY
 from src import config
 import datetime
 from contextlib import asynccontextmanager
 from src.alert_scheduler import start_scheduler
+from sqlalchemy import func
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -115,38 +116,48 @@ async def scan_rsi():
                 rvol_1 = df_1d_proc["rvol"].iloc[-1]
                 rvol_2 = df_1d_proc["rvol"].iloc[-2]
 
-                # 2. Obtener data 4H para el RSI
-                df_4h = obtener_velas_polygon(stock.symbol, "4H")
-                if df_4h.empty or len(df_4h) < 15:
-                    continue
-                    
-                df_4h_proc = procesar_indicadores(df_4h)
-                last_rsi = df_4h_proc["RSI"].iloc[-1]
-                
-                if last_rsi <= LIMITE_RSI_4H:
-                    # Normalizar símbolo para evitar duplicados por minúsculas
+                rsi = df_1d_proc["RSI"].iloc[-1]
+                hma_a = df_1d_proc["hma_a"].iloc[-1]
+                hma_b = df_1d_proc["hma_b"].iloc[-1]
+
+                if rsi <= LIMITE_RSI_1D:
                     clean_symbol = stock.symbol.strip().upper()
+                    existing_rsi1d = db.query(RSI_1D).filter(RSI_1D.symbol == clean_symbol).first()
                     
-                    # Buscar si ya existe para actualizar o insertar
-                    existing_entry = db.query(RSI_4H).filter(RSI_4H.symbol == clean_symbol).first()
-                    
-                    if existing_entry:
-                        existing_entry.rsi_value = float(round(last_rsi, 2))
-                        existing_entry.variation = float(round(last_var, 2))
-                        existing_entry.rvol_1 = float(round(rvol_1, 2))
-                        existing_entry.rvol_2 = float(round(rvol_2, 2))
-                        existing_entry.timestamp = datetime.datetime.utcnow()
-                    else:
-                        new_hit = RSI_4H(
-                            symbol=clean_symbol, 
-                            rsi_value=float(round(last_rsi, 2)),
+                    if not existing_rsi1d:
+                        # Nueva entrada
+                        new_rsi1d = RSI_1D(
+                            symbol=clean_symbol,
+                            rsi_value=float(round(rsi, 2)),
                             variation=float(round(last_var, 2)),
                             rvol_1=float(round(rvol_1, 2)),
-                            rvol_2=float(round(rvol_2, 2))
+                            rvol_2=float(round(rvol_2, 2)),
+                            hma_a=float(round(hma_a, 2)),
+                            hma_b=float(round(hma_b, 2)),
+                            entry_date=datetime.datetime.utcnow(),
+                            min_price=float(last_close),
+                            candles_since_min=0,
+                            timestamp=datetime.datetime.utcnow()
                         )
-                        db.add(new_hit)
+                        db.add(new_rsi1d)
                         rsi_hits += 1
-                
+                    else:
+                        # Ya existe, actualizamos valores actuales
+                        existing_rsi1d.rsi_value = float(round(rsi, 2))
+                        existing_rsi1d.variation = float(round(last_var, 2))
+                        existing_rsi1d.rvol_1 = float(round(rvol_1, 2))
+                        existing_rsi1d.rvol_2 = float(round(rvol_2, 2))
+                        existing_rsi1d.hma_a = float(round(hma_a, 2))
+                        existing_rsi1d.hma_b = float(round(hma_b, 2))
+                        existing_rsi1d.timestamp = datetime.datetime.utcnow()
+                        
+                        # Lógica de mínimo y conteo de velas
+                        recalculate_rsi_1d_stats(existing_rsi1d, df_1d_proc)
+
+
+
+
+
                 processed_count += 1
             except Exception as inner_e:
                 print(f"Error procesando {stock.symbol}: {inner_e}")
@@ -154,7 +165,7 @@ async def scan_rsi():
         
         db.commit()
         return {
-            "message": f"Escaneo completado. {processed_count} stocks analizados, {rsi_hits} registros nuevos en RSI_4H (RSI <= {LIMITE_RSI_4H})"
+            "message": f"Escaneo completado. {processed_count} stocks analizados, {rsi_hits} registros nuevos en RSI_1D (RSI <= {LIMITE_RSI_1D})"
         }
     except Exception as e:
         db.rollback()
@@ -166,9 +177,8 @@ async def scan_rsi():
 async def get_results():
     db = SessionLocal()
     try:
-        results = db.query(RSI_4H).order_by(RSI_4H.timestamp.desc()).limit(100).all()
-        # Formato esperado por index.html: [symbol, var, rsi, date, rvol1, rvol2]
-        # Ajustamos el retorno para incluir los RVOLs
+        results = db.query(RSI_1D).order_by(RSI_1D.timestamp.desc()).limit(100).all()
+        # [symbol, rvol1, rvol2, var, rsi, hma10, hma20, min_price, candles, date]
         return [
             [
                 r.symbol, 
@@ -176,6 +186,11 @@ async def get_results():
                 r.rvol_2, 
                 r.variation, 
                 r.rsi_value, 
+                r.hma_a,
+                r.hma_b,
+                r.min_price,
+                r.candles_since_min,
+                (r.entry_date + datetime.timedelta(hours=TIMEZONE_UTC)).strftime("%Y-%m-%d"),
                 (r.timestamp + datetime.timedelta(hours=TIMEZONE_UTC)).strftime("%Y-%m-%d %H:%M")
             ] 
             for r in results
@@ -267,6 +282,71 @@ async def delete_favorite(symbol: str):
         raise HTTPException(status_code=404, detail="No encontrado")
     finally:
         db.close()
+
+@app.delete("/api/rsi_1d/{symbol}")
+async def delete_rsi_1d(symbol: str):
+    db = SessionLocal()
+    try:
+        entry = db.query(RSI_1D).filter(RSI_1D.symbol == symbol.upper()).first()
+        if entry:
+            db.delete(entry)
+            db.commit()
+            return {"message": f"{symbol} eliminado de RSI_1D"}
+        raise HTTPException(status_code=404, detail="Símbolo no encontrado")
+    finally:
+        db.close()
+
+@app.post("/api/rsi_1d/update_date")
+async def update_rsi_1d_date(data: dict):
+    # data: { "symbol": "AAPL", "new_date": "2023-10-27" }
+    db = SessionLocal()
+    try:
+        symbol = data["symbol"].upper()
+        new_date_str = data["new_date"]
+        new_date = datetime.datetime.strptime(new_date_str, "%Y-%m-%d")
+        
+        entry = db.query(RSI_1D).filter(RSI_1D.symbol == symbol).first()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Símbolo no encontrado")
+        
+        entry.entry_date = new_date
+        
+        # Obtener data 1D para recálculo
+        df_1d = obtener_velas_polygon(symbol, "1D")
+        if not df_1d.empty:
+            df_1d_proc = procesar_indicadores(df_1d)
+            recalculate_rsi_1d_stats(entry, df_1d_proc)
+        
+        db.commit()
+        return {"message": f"Fecha actualizada para {symbol} y estadísticas recalculadas"}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Usar YYYY-MM-DD")
+    finally:
+        db.close()
+
+def recalculate_rsi_1d_stats(entry, df_1d_proc):
+    """
+    Recalcula min_price y candles_since_min basado en entry_date.
+    """
+    entry_date = entry.entry_date
+    df_hist = df_1d_proc[df_1d_proc.index.date >= entry_date.date()]
+    
+    if not df_hist.empty:
+        min_row = df_hist.loc[df_hist['close'].idxmin()]
+        min_val = float(min_row['close'])
+        min_date = min_row.name
+        
+        # Contar velas desde el mínimo hasta el final
+        candles_count = len(df_hist.loc[min_date:]) - 1
+        if candles_count < 0: candles_count = 0
+        
+        entry.min_price = min_val
+        entry.candles_since_min = int(candles_count)
+
+@app.get("/api/config")
+async def get_config():
+    from src.config import HMA_A, HMA_B
+    return {"HMA_A": HMA_A, "HMA_B": HMA_B}
 
 if __name__ == "__main__":
     import uvicorn

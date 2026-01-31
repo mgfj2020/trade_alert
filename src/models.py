@@ -21,6 +21,21 @@ class RSI_4H(Base):
     rvol_2 = Column(Float)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
+class RSI_1D(Base):
+    __tablename__ = "rsi_1d"
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, unique=True, index=True)
+    rsi_value = Column(Float)
+    variation = Column(Float)
+    rvol_1 = Column(Float)
+    rvol_2 = Column(Float)
+    hma_a = Column(Float)
+    hma_b = Column(Float)
+    min_price = Column(Float)
+    candles_since_min = Column(Integer)
+    entry_date = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+
 class Favorite(Base):
     __tablename__ = "favorites"
     id = Column(Integer, primary_key=True, index=True)
