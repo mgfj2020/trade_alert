@@ -2,7 +2,7 @@ import requests
 import datetime
 import time
 from apscheduler.schedulers.background import BackgroundScheduler
-from src.models import SessionLocal, Favorite
+from src.models import SessionLocal, StockTracking
 from src.core.polygon_client import obtener_velas_polygon
 from src.core.indicators import procesar_indicadores, evaluar_estado_hma90
 from src import config
@@ -31,10 +31,10 @@ def evaluate_rules():
     db = SessionLocal()
     alertas_mensajes = []
     try:
-        favorites = db.query(Favorite).all()
-        print(f"Analizando {len(favorites)} favoritos...")
+        stock_tracking_list = db.query(StockTracking).all()
+        print(f"Analizando {len(stock_tracking_list)} stocks en seguimiento...")
         
-        for fav in favorites:
+        for fav in stock_tracking_list:
             try:
                 # Obtener velas diarias para calcular precio actual y HMA90
                 df = obtener_velas_polygon(fav.symbol, "1D")

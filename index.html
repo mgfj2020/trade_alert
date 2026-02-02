@@ -109,6 +109,7 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           <li class="nav-item"><a class="nav-link active" href="/">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="/track">Track Stock</a></li>
           <li class="nav-item"><a class="nav-link" href="/favoritos">Favoritos</a></li>
         </ul>
       </div>
@@ -132,7 +133,8 @@
           </div>
           <div class="col-md text-md-end">
             <button class="btn btn-warning me-2" onclick="scanRSI()">🔍 Escanear RSI_1D</button>
-            <button class="btn btn-success me-2" onclick="guardarFavoritos()">⭐ Guardar Favoritos</button>
+            <button class="btn btn-success me-2" onclick="guardarTrack()">⭐ Track Stock</button>
+            <button class="btn btn-info me-2" onclick="guardarFavoritos()">❤️ Favoritos</button>
           </div>
         </div>
       </div>
@@ -175,8 +177,9 @@
       if (!f) return alert("Selecciona un CSV");
       const fd = new FormData();
       fd.append("file", f);
-      await fetch("/upload-csv", { method: "POST", body: fd });
-      alert("CSV Procesado");
+      const res = await fetch("/upload-csv", { method: "POST", body: fd });
+      const data = await res.json();
+      alert(data.message || "CSV Procesado");
     }
 
     async function scanRSI() {
@@ -269,6 +272,17 @@
       loadData();
     }
 
+    async function guardarTrack() {
+      const syms = [...document.querySelectorAll("#table-body input[type=checkbox]:checked")].map((c) => c.value);
+      if (syms.length === 0) return alert("Selecciona al menos 1 stock");
+      await fetch("/api/add_track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(syms),
+      });
+      alert("Agregados a Track Stock");
+    }
+
     async function guardarFavoritos() {
       const syms = [...document.querySelectorAll("#table-body input[type=checkbox]:checked")].map((c) => c.value);
       if (syms.length === 0) return alert("Selecciona al menos 1 stock");
@@ -277,7 +291,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(syms),
       });
-      alert("Agregados a favoritos");
+      alert("Agregados a Favoritos");
     }
 
     async function guardarInvertidos() {

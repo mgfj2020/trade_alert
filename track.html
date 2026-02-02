@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Favoritos | Trading RSI</title>
+  <title>Track Stock | Trading RSI</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
@@ -101,8 +101,8 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
-          <li class="nav-item"><a class="nav-link" href="/track">Track Stock</a></li>
-          <li class="nav-item"><a class="nav-link active" href="/favoritos">Favoritos</a></li>
+          <li class="nav-item"><a class="nav-link active" href="/track">Track Stock</a></li>
+          <li class="nav-item"><a class="nav-link" href="/favoritos">Favoritos</a></li>
         </ul>
       </div>
     </nav>
@@ -110,33 +110,9 @@
 
   <div class="container pb-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h3 class="fw-bold mb-0">❤️ Favoritos</h3>
+      <h3 class="fw-bold mb-0">⭐ Track Stock</h3>
       <div>
         <button class="btn btn-outline-secondary btn-sm" onclick="loadFav()">🔁 Recargar</button>
-      </div>
-    </div>
-
-    <!-- Formulario Manual -->
-    <div class="card mb-4 border-0">
-      <div class="card-body p-4">
-        <h5 class="fw-bold mb-3">➕ Agregar Favorito Manualmente</h5>
-        <div class="row g-3">
-          <div class="col-md-3">
-            <input type="text" id="manSymbol" class="form-control" placeholder="Símbolo (ej: TSLA)" />
-          </div>
-          <div class="col-md-3">
-            <input type="number" id="manAlert" step="0.01" class="form-control" placeholder="Valor Alerta" />
-          </div>
-          <div class="col-md-3">
-            <select id="manDir" class="form-select">
-              <option value="encima">encima</option>
-              <option value="debajo">debajo</option>
-            </select>
-          </div>
-          <div class="col-md-3">
-            <button class="btn btn-primary w-100" onclick="addManual()">Agregar</button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -147,10 +123,15 @@
             <tr>
               <th style="width: 50px;">DEL</th>
               <th>Símbolo</th>
-              <th>VALOR ACTUAL</th>
-              <th>VALOR ALERTA</th>
-              <th>DIRECCIÓN</th>
-              <th>ACCIONES</th>
+              <th>RVOL 1</th>
+              <th>RVOL 2</th>
+              <th>Var %</th>
+              <th>RSI 1D</th>
+              <th>HMA_A</th>
+              <th>HMA_B</th>
+              <th>MÍNIMO</th>
+              <th>VELAS</th>
+              <th>Entry Date</th>
             </tr>
           </thead>
           <tbody id="fav-body"></tbody>
@@ -162,7 +143,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     async function loadFav() {
-      const r = await fetch("/api/favoritos_data");
+      const r = await fetch("/api/track_data");
       const d = await r.json();
       const tb = document.getElementById("fav-body");
       tb.innerHTML = "";
@@ -170,63 +151,24 @@
       d.forEach((row) => {
         const tr = document.createElement("tr");
         const symbol = row[0];
-        const current_val = row[1];
-        const alert_val = row[2];
-        const alert_dir = row[3];
         const tvUrl = `https://es.tradingview.com/chart/vODPKhks/?symbol=${symbol}`;
 
-        tr.innerHTML = `
-          <td><button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delFav('${symbol}')">×</button></td>
-          <td><a href="${tvUrl}" target="_blank" class="symbol-link">${symbol}</a></td>
-          <td><input type="number" step="0.01" class="form-control form-control-sm" id="curr-${symbol}" value="${current_val}"></td>
-          <td><input type="number" step="0.01" class="form-control form-control-sm" id="alert-${symbol}" value="${alert_val}"></td>
-          <td>
-            <select class="form-select form-select-sm" id="dir-${symbol}">
-              <option value="encima" ${alert_dir === 'encima' ? 'selected' : ''}>encima</option>
-              <option value="debajo" ${alert_dir === 'debajo' ? 'selected' : ''}>debajo</option>
-            </select>
-          </td>
-          <td>
-            <button class="btn btn-sm btn-primary" onclick="updateFav('${symbol}')">Actualizar</button>
-          </td>
-        `;
+        // Technical data (indexes 1 to 9)
+        let colsHtml = `<td><button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delFav('${symbol}')">×</button></td>`;
+        colsHtml += `<td><a href="${tvUrl}" target="_blank" class="symbol-link">${symbol}</a></td>`;
+
+        for (let i = 1; i <= 9; i++) {
+          colsHtml += `<td>${row[i] ?? "-"}</td>`;
+        }
+
+        tr.innerHTML = colsHtml;
         tb.appendChild(tr);
       });
     }
 
-    async function addManual() {
-      const symbol = document.getElementById('manSymbol').value;
-      const alert_value = document.getElementById('manAlert').value;
-      const direction = document.getElementById('manDir').value;
-
-      if (!symbol || !alert_value) return alert("Completa los campos");
-
-      const r = await fetch("/api/add_manual_favorite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, alert_value, direction })
-      });
-      const res = await r.json();
-      alert(res.message);
-      loadFav();
-    }
-
-    async function updateFav(symbol) {
-      const current_value = document.getElementById(`curr-${symbol}`).value;
-      const alert_value = document.getElementById(`alert-${symbol}`).value;
-      const alert_direction = document.getElementById(`dir-${symbol}`).value;
-
-      const r = await fetch("/api/update_favorite_values", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, current_value, alert_value, alert_direction })
-      });
-      if (r.ok) alert("Actualizado");
-    }
-
     async function delFav(sym) {
       if (!confirm(`¿Eliminar ${sym}?`)) return;
-      await fetch(`/api/favoritos/${sym}`, { method: "DELETE" });
+      await fetch(`/api/track/${sym}`, { method: "DELETE" });
       loadFav();
     }
 

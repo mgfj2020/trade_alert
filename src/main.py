@@ -5,33 +5,20 @@ from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from src.models import SessionLocal, init_db, StockList, RSI_4H, RSI_1D, Favorite
+from src.models import SessionLocal, init_db, StockList, RSI_4H, RSI_1D, StockTracking, Favorite
 from src.core.polygon_client import obtener_velas_polygon
 from src.core.indicators import calcular_rsi, procesar_indicadores
 from src.config import LIMITE_RSI_1D, TIMEZONE_UTC, API_KEY
 from src import config
 import datetime
 from contextlib import asynccontextmanager
-from src.alert_scheduler import start_scheduler
 from sqlalchemy import func
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Inicializar base de datos
     init_db()
     
-    # Iniciar el scheduler de alertas solo si se solicita explícitamente
-    # Esto es útil para separar la Web del Worker en Cloud Run
-    scheduler = None
-    if os.getenv("START_SCHEDULER", "true").lower() == "true":
-        scheduler = start_scheduler()
-        print("Scheduler iniciado dentro de la app.")
-        
     yield
-    
-    # Apagar el scheduler al cerrar la app
-    if scheduler:
-        scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -46,6 +33,10 @@ async def read_root(request: Request):
 async def read_favoritos(request: Request):
     return templates.TemplateResponse("favoritos.html", {"request": request})
 
+@app.get("/track", response_class=HTMLResponse)
+async def read_track(request: Request):
+    return templates.TemplateResponse("track.html", {"request": request})
+
 @app.post("/upload-csv")
 async def upload_csv(file: UploadFile = File(...)):
     if not file.filename.lower().endswith('.csv'):
@@ -58,14 +49,17 @@ async def upload_csv(file: UploadFile = File(...)):
         # Normalizar nombres de columnas a minúsculas para facilitar búsqueda
         df.columns = [c.lower() for c in df.columns]
         
-        if 'symbol' not in df.columns:
-            raise HTTPException(status_code=400, detail="El CSV debe contener una columna 'symbol'")
+        # Determinar la columna de símbolo (puede ser 'symbol' o 'stock')
+        symbol_col = next((c for c in df.columns if c in ['symbol', 'stock']), None)
+        
+        if not symbol_col:
+            raise HTTPException(status_code=400, detail="El CSV debe contener una columna 'symbol' o 'stock'")
         
         db = SessionLocal()
         new_symbols_count = 0
         try:
             # Eliminar duplicados en el CSV y valores nulos
-            symbols = df['symbol'].dropna().unique()
+            symbols = df[symbol_col].dropna().unique()
             
             for symbol in symbols:
                 symbol = str(symbol).strip().upper()
@@ -142,17 +136,8 @@ async def scan_rsi():
                         db.add(new_rsi1d)
                         rsi_hits += 1
                     else:
-                        # Ya existe, actualizamos valores actuales
-                        existing_rsi1d.rsi_value = float(round(rsi, 2))
-                        existing_rsi1d.variation = float(round(last_var, 2))
-                        existing_rsi1d.rvol_1 = float(round(rvol_1, 2))
-                        existing_rsi1d.rvol_2 = float(round(rvol_2, 2))
-                        existing_rsi1d.hma_a = float(round(hma_a, 2))
-                        existing_rsi1d.hma_b = float(round(hma_b, 2))
-                        existing_rsi1d.timestamp = datetime.datetime.utcnow()
-                        
-                        # Lógica de mínimo y conteo de velas
-                        recalculate_rsi_1d_stats(existing_rsi1d, df_1d_proc)
+                        # Ya existe, lo saltamos según requerimiento
+                        continue
 
 
 
@@ -198,17 +183,51 @@ async def get_results():
     finally:
         db.close()
 
+@app.post("/api/add_track")
+async def add_to_track(symbols: list[str]):
+    db = SessionLocal()
+    try:
+        for symbol in symbols:
+            source = db.query(RSI_1D).filter(RSI_1D.symbol == symbol).first()
+            if not source: continue
+            exists = db.query(StockTracking).filter(StockTracking.symbol == symbol).first()
+            if not exists:
+                db.add(StockTracking(
+                    symbol=source.symbol, rsi_value=source.rsi_value, variation=source.variation,
+                    rvol_1=source.rvol_1, rvol_2=source.rvol_2, hma_a=source.hma_a, hma_b=source.hma_b,
+                    min_price=source.min_price, candles_since_min=source.candles_since_min, entry_date=source.entry_date
+                ))
+        db.commit()
+        return {"message": "Símbolos agregados a Track Stock"}
+    finally:
+        db.close()
+
 @app.post("/api/add_favoritos")
 async def add_to_favorites(symbols: list[str]):
     db = SessionLocal()
     try:
         for symbol in symbols:
-            # Evitar duplicados
             exists = db.query(Favorite).filter(Favorite.symbol == symbol).first()
             if not exists:
                 db.add(Favorite(symbol=symbol))
         db.commit()
-        return {"message": "Símbolos agregados a favoritos"}
+        return {"message": "Símbolos agregados a Favoritos"}
+    finally:
+        db.close()
+
+@app.get("/api/track_data")
+async def get_track_data():
+    db = SessionLocal()
+    try:
+        favs = db.query(StockTracking).all()
+        return [
+            [
+                f.symbol, f.rvol_1, f.rvol_2, f.variation, f.rsi_value, 
+                f.hma_a, f.hma_b, f.min_price, f.candles_since_min,
+                (f.entry_date + datetime.timedelta(hours=TIMEZONE_UTC)).strftime("%Y-%m-%d") if f.entry_date else "-",
+                f.current_value, f.alert_value, f.alert_direction
+            ] for f in favs
+        ]
     finally:
         db.close()
 
@@ -217,7 +236,6 @@ async def get_favorites():
     db = SessionLocal()
     try:
         favs = db.query(Favorite).all()
-        # [symbol, current_value, alert_value, alert_direction]
         return [[f.symbol, f.current_value, f.alert_value, f.alert_direction] for f in favs]
     finally:
         db.close()
@@ -270,6 +288,21 @@ async def update_favorite_values(data: dict):
     finally:
         db.close()
 
+@app.post("/api/update_track_values")
+async def update_track_values(data: dict):
+    db = SessionLocal()
+    try:
+        fav = db.query(StockTracking).filter(StockTracking.symbol == data["symbol"]).first()
+        if fav:
+            fav.current_value = float(data["current_value"])
+            fav.alert_value = float(data["alert_value"])
+            fav.alert_direction = data["alert_direction"]
+            db.commit()
+            return {"message": "Actualizado"}
+        raise HTTPException(status_code=404, detail="No encontrado")
+    finally:
+        db.close()
+
 @app.delete("/api/favoritos/{symbol}")
 async def delete_favorite(symbol: str):
     db = SessionLocal()
@@ -278,7 +311,20 @@ async def delete_favorite(symbol: str):
         if fav:
             db.delete(fav)
             db.commit()
-            return {"message": "Eliminado"}
+            return {"message": "Eliminado de Favoritos"}
+        raise HTTPException(status_code=404, detail="No encontrado")
+    finally:
+        db.close()
+
+@app.delete("/api/track/{symbol}")
+async def delete_track(symbol: str):
+    db = SessionLocal()
+    try:
+        fav = db.query(StockTracking).filter(StockTracking.symbol == symbol).first()
+        if fav:
+            db.delete(fav)
+            db.commit()
+            return {"message": "Eliminado de Track Stock"}
         raise HTTPException(status_code=404, detail="No encontrado")
     finally:
         db.close()
