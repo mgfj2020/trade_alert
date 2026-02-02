@@ -101,6 +101,7 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="/track">Track Stock</a></li>
           <li class="nav-item"><a class="nav-link active" href="/favoritos">Favoritos</a></li>
         </ul>
       </div>
@@ -109,7 +110,7 @@
 
   <div class="container pb-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h3 class="fw-bold mb-0">⭐ Stocks Favoritos</h3>
+      <h3 class="fw-bold mb-0">❤️ Favoritos</h3>
       <div>
         <button class="btn btn-outline-secondary btn-sm" onclick="loadFav()">🔁 Recargar</button>
       </div>
@@ -118,7 +119,7 @@
     <!-- Formulario Manual -->
     <div class="card mb-4 border-0">
       <div class="card-body p-4">
-        <h5 class="fw-bold mb-3">➕ Agregar Stock Manualmente</h5>
+        <h5 class="fw-bold mb-3">➕ Agregar Favorito Manualmente</h5>
         <div class="row g-3">
           <div class="col-md-3">
             <input type="text" id="manSymbol" class="form-control" placeholder="Símbolo (ej: TSLA)" />
@@ -235,7 +236,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol, current_value, alert_value, alert_direction })
       });
-
+      if (r.ok) alert("Actualizado");
     }
 
     async function delFav(sym) {

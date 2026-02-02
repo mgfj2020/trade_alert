@@ -10,9 +10,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./databases/trade_alert.db")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-LIMITE_RSI_4H = float(os.getenv("LIMITE_RSI_4H", 30))
+LIMITE_RSI_1D = float(os.getenv("LIMITE_RSI_1D", 30))
 STOCK_ALERT = str(os.getenv("STOCK_ALERT", "https://ntfy.sh/your_topic"))
 TIMEZONE_UTC = int(os.getenv("TIMEZONE_UTC", 0))
+HMA_A = int(os.getenv("HMA_A", 10))
+HMA_B = int(os.getenv("HMA_B", 20))
 
 # Horarios de alerta (Días de la semana 0-4 es Lunes-Viernes)
 ALERT_DAYS = [0, 1, 2, 3, 4]

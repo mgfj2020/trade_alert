@@ -37,6 +37,14 @@ def procesar_indicadores(df, rvol_periodos=60):
     df["hma9"] = hma(df["close"], 9)
     df["hma90"] = hma(df["close"], 90)
 
+    from src.config import HMA_A, HMA_B
+    df[f"hma_{HMA_A}"] = hma(df["close"], HMA_A)
+    df[f"hma_{HMA_B}"] = hma(df["close"], HMA_B)    
+    
+    # Alias para compatibilidad interna si es necesario, o simplemente usarlos
+    df["hma_a"] = df[f"hma_{HMA_A}"]
+    df["hma_b"] = df[f"hma_{HMA_B}"]
+
     # RVOL
     vol = df["volume"].astype(float)
     vol_prom = vol.rolling(window=rvol_periodos, min_periods=1).mean()

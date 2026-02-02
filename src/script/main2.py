@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from src.models import SessionLocal, init_db, StockList, RSI_4H, Favorite
 from src.core.polygon_client import obtener_velas_polygon
 from src.core.indicators import calcular_rsi, procesar_indicadores
-from src.config import LIMITE_RSI_4H, TIMEZONE_UTC
+from src.config import TIMEZONE_UTC
 from src import config
 import datetime
 from contextlib import asynccontextmanager
@@ -107,38 +107,6 @@ async def scan_rsi():
                 rvol_1 = df_1d_proc["rvol"].iloc[-1]
                 rvol_2 = df_1d_proc["rvol"].iloc[-2]
 
-                # 2. Obtener data 4H para el RSI
-                df_4h = obtener_velas_polygon(stock.symbol, "4H")
-                if df_4h.empty or len(df_4h) < 15:
-                    continue
-                    
-                df_4h_proc = procesar_indicadores(df_4h)
-                last_rsi = df_4h_proc["RSI"].iloc[-1]
-                
-                if last_rsi <= LIMITE_RSI_4H:
-                    # Normalizar símbolo para evitar duplicados por minúsculas
-                    clean_symbol = stock.symbol.strip().upper()
-                    
-                    # Buscar si ya existe para actualizar o insertar
-                    existing_entry = db.query(RSI_4H).filter(RSI_4H.symbol == clean_symbol).first()
-                    
-                    if existing_entry:
-                        existing_entry.rsi_value = float(round(last_rsi, 2))
-                        existing_entry.variation = float(round(last_var, 2))
-                        existing_entry.rvol_1 = float(round(rvol_1, 2))
-                        existing_entry.rvol_2 = float(round(rvol_2, 2))
-                        existing_entry.timestamp = datetime.datetime.utcnow()
-                    else:
-                        new_hit = RSI_4H(
-                            symbol=clean_symbol, 
-                            rsi_value=float(round(last_rsi, 2)),
-                            variation=float(round(last_var, 2)),
-                            rvol_1=float(round(rvol_1, 2)),
-                            rvol_2=float(round(rvol_2, 2))
-                        )
-                        db.add(new_hit)
-                        rsi_hits += 1
-                
                 processed_count += 1
             except Exception as inner_e:
                 print(f"Error procesando {stock.symbol}: {inner_e}")
@@ -146,7 +114,7 @@ async def scan_rsi():
         
         db.commit()
         return {
-            "message": f"Escaneo completado. {processed_count} stocks analizados, {rsi_hits} registros nuevos en RSI_4H (RSI <= {LIMITE_RSI_4H})"
+            "message": f"Escaneo completado. {processed_count} stocks analizados, {rsi_hits} registros nuevos en RSI_1D (RSI <= {LIMITE_RSI_1D})"
         }
     except Exception as e:
         db.rollback()

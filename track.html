@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Track Stock | Trading RSI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #0d6efd;
+      --secondary-color: #6c757d;
+      --dark-bg: #1a1d20;
+      --light-bg: #f8f9fa;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--light-bg);
+      color: #333;
+    }
+
+    header {
+      background: linear-gradient(135deg, #212529 0%, #343a40 100%);
+      padding: 0.75rem 0;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .navbar-brand {
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      font-size: 1.5rem;
+    }
+
+    .nav-link {
+      font-weight: 500;
+      transition: all 0.3s ease;
+      opacity: 0.8;
+    }
+
+    .nav-link:hover {
+      opacity: 1;
+      transform: translateY(-1px);
+    }
+
+    .nav-link.active {
+      color: #fff !important;
+      font-weight: 700;
+      opacity: 1;
+    }
+
+    .table-container {
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+    }
+
+    .table thead th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+      padding: 1rem;
+    }
+
+    .table tbody td {
+      padding: 1rem;
+      font-size: 0.9rem;
+      vertical-align: middle;
+    }
+
+    .symbol-link {
+      color: var(--primary-color);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .symbol-link:hover {
+      text-decoration: underline;
+    }
+
+    .btn {
+      border-radius: 8px;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+    }
+  </style>
+</head>
+
+<body class="bg-light">
+  <header>
+    <nav class="navbar navbar-expand-lg navbar-dark container">
+      <a class="navbar-brand" href="/">📈 TRADING<span class="text-primary">RSI</span></a>
+      <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link active" href="/track">Track Stock</a></li>
+          <li class="nav-item"><a class="nav-link" href="/favoritos">Favoritos</a></li>
+        </ul>
+      </div>
+    </nav>
+  </header>
+
+  <div class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h3 class="fw-bold mb-0">⭐ Track Stock</h3>
+      <div>
+        <button id="btn-hma" class="btn btn-primary btn-sm me-2" onclick="recalculateHMA()">📊 Calcular HMA</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="loadFav()">🔁 Recargar</button>
+      </div>
+    </div>
+
+    <div class="table-container shadow-sm border-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width: 50px;">DEL</th>
+              <th>Símbolo</th>
+              <th>Precio Actual</th>
+              <th>RSI 1D</th>
+              <th>Variación</th>
+              <th>RVOL 1 (Hoy)</th>
+              <th>RVOL 2 (Ayer)</th>
+              <th>HMA_A</th>
+              <th>HMA_B</th>
+              <th>Límite RSI</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="fav-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    async function loadFav() {
+      const r = await fetch("/api/track_data");
+      const d = await r.json();
+      const tb = document.getElementById("fav-body");
+      tb.innerHTML = "";
+
+      d.forEach((row) => {
+        const tr = document.createElement("tr");
+        const symbol = row[0];
+        const tvUrl = `https://es.tradingview.com/chart/vODPKhks/?symbol=${symbol}`;
+
+        // Technical data (indexes 1 to 9)
+        let colsHtml = `<td><button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delFav('${symbol}')">×</button></td>`;
+        colsHtml += `<td><a href="${tvUrl}" target="_blank" class="symbol-link">${symbol}</a></td>`;
+
+        for (let i = 1; i <= 9; i++) {
+          let val = row[i] ?? "-";
+          // Formatear variación con % si es el índice 3
+          if (i === 3 && val !== "-") {
+            val = val + "%";
+          }
+          colsHtml += `<td>${val}</td>`;
+        }
+
+        tr.innerHTML = colsHtml;
+        tb.appendChild(tr);
+      });
+    }
+
+    async function delFav(sym) {
+      if (!confirm(`¿Eliminar ${sym}?`)) return;
+      await fetch(`/api/track/${sym}`, { method: "DELETE" });
+      loadFav();
+    }
+
+    async function recalculateHMA() {
+      const btn = document.getElementById("btn-hma");
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Calculando...";
+
+      try {
+        const r = await fetch("/api/recalculate_hma", { method: "POST" });
+        const d = await r.json();
+        alert(d.message);
+        await loadFav();
+      } catch (e) {
+        alert("Error recalcuando HMA: " + e);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
+    window.onload = loadFav;
+  </script>
+</body>
+
+</html>

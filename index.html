@@ -109,6 +109,7 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           <li class="nav-item"><a class="nav-link active" href="/">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="/track">Track Stock</a></li>
           <li class="nav-item"><a class="nav-link" href="/favoritos">Favoritos</a></li>
         </ul>
       </div>
@@ -131,8 +132,9 @@
             <button class="btn btn-primary w-100" onclick="uploadCSV()">⬆️ Subir CSV</button>
           </div>
           <div class="col-md text-md-end">
-            <button class="btn btn-warning me-2" onclick="scanRSI()">🔍 Escanear RSI_4H</button>
-            <button class="btn btn-success me-2" onclick="guardarFavoritos()">⭐ Guardar Favoritos</button>
+            <button class="btn btn-warning me-2" onclick="scanRSI()">🔍 Escanear RSI_1D</button>
+            <button class="btn btn-success me-2" onclick="guardarTrack()">⭐ Track Stock</button>
+            <button class="btn btn-info me-2" onclick="guardarFavoritos()">❤️ Favoritos</button>
           </div>
         </div>
       </div>
@@ -148,8 +150,14 @@
               <th>RVOL 1 (1D)</th>
               <th>RVOL 2 (1D)</th>
               <th>Variación % (1D)</th>
-              <th>RSI 4H</th>
+              <th>RSI 1D</th>
+              <th id="label-hma-a">HMA_A</th>
+              <th id="label-hma-b">HMA_B</th>
+              <th>MÍNIMO</th>
+              <th>VELAS</th>
+              <th>Entry Date</th>
               <th>Fecha Escaneo</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="table-body"></tbody>
@@ -169,8 +177,9 @@
       if (!f) return alert("Selecciona un CSV");
       const fd = new FormData();
       fd.append("file", f);
-      await fetch("/upload-csv", { method: "POST", body: fd });
-      alert("CSV Procesado");
+      const res = await fetch("/upload-csv", { method: "POST", body: fd });
+      const data = await res.json();
+      alert(data.message || "CSV Procesado");
     }
 
     async function scanRSI() {
@@ -180,14 +189,20 @@
       try {
         const r = await fetch("/scan-rsi", { method: "POST" });
         const res = await r.json();
+        alert(res.message);
         loadData();
       } finally {
         btn.disabled = false;
-        btn.innerText = "🔍 Escanear RSI_4H";
+        btn.innerText = "🔍 Escanear RSI_1D";
       }
     }
 
     async function loadData() {
+      const r_conf = await fetch("/api/config");
+      const conf = await r_conf.json();
+      document.getElementById("label-hma-a").innerText = `HMA (${conf.HMA_A})`;
+      document.getElementById("label-hma-b").innerText = `HMA (${conf.HMA_B})`;
+
       const r = await fetch("/api/data");
       const d = await r.json();
       const tb = document.getElementById("table-body");
@@ -201,15 +216,71 @@
         let colsHtml = `<td><input type="checkbox" class="form-check-input" value="${symbol}"></td>`;
         colsHtml += `<td><a href="${tvUrl}" target="_blank" class="symbol-link">${symbol}</a></td>`;
 
-        row.forEach((cell, idx) => {
-          if (idx > 0) {
-            colsHtml += `<td>${cell ?? "-"}</td>`;
-          }
-        });
+        // row: [symbol, rvol1, rvol2, var, rsi, hma10, hma20, min_price, candles, entry_date, date]
+        // Indexes in row to show normally: 1 to 8
+        for (let i = 1; i <= 8; i++) {
+          colsHtml += `<td>${row[i] ?? "-"}</td>`;
+        }
+
+        // Entry Date (editable)
+        const entryDate = row[9];
+        colsHtml += `<td>
+          <div class="d-flex align-items-center gap-1">
+            <span>${entryDate}</span>
+            <button class="btn btn-sm btn-outline-secondary p-0 px-1" onclick="changeEntryDate('${symbol}', '${entryDate}')" title="Editar Fecha">✏️</button>
+          </div>
+        </td>`;
+
+        // Fecha Escaneo (timestamp)
+        colsHtml += `<td>${row[10] ?? "-"}</td>`;
+
+        // Acciones
+        colsHtml += `<td>
+          <button class="btn btn-sm btn-outline-danger p-1" onclick="deleteRSI1D('${symbol}')" title="Eliminar entry">🗑️</button>
+        </td>`;
 
         tr.innerHTML = colsHtml;
         tb.appendChild(tr);
       });
+    }
+
+    async function changeEntryDate(symbol, currentDate) {
+      const newDate = prompt("Nueva fecha de entrada (YYYY-MM-DD):", currentDate);
+      if (!newDate || newDate === currentDate) return;
+
+      const r = await fetch("/api/rsi_1d/update_date", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, new_date: newDate })
+      });
+
+      const res = await r.json();
+      if (r.ok) {
+        alert(res.message);
+        loadData();
+      } else {
+        alert("Error: " + res.detail);
+      }
+    }
+
+    async function deleteRSI1D(symbol) {
+      if (!confirm(`¿Eliminar ${symbol} de la tabla RSI_1D?`)) return;
+
+      const r = await fetch(`/api/rsi_1d/${symbol}`, { method: "DELETE" });
+      const res = await r.json();
+      alert(res.message);
+      loadData();
+    }
+
+    async function guardarTrack() {
+      const syms = [...document.querySelectorAll("#table-body input[type=checkbox]:checked")].map((c) => c.value);
+      if (syms.length === 0) return alert("Selecciona al menos 1 stock");
+      await fetch("/api/add_track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(syms),
+      });
+      alert("Agregados a Track Stock");
     }
 
     async function guardarFavoritos() {
@@ -220,7 +291,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(syms),
       });
-      alert("Agregados a favoritos");
+      alert("Agregados a Favoritos");
     }
 
     async function guardarInvertidos() {
