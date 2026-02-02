@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from src.models import SessionLocal, init_db, StockList, RSI_4H, RSI_1D, StockTracking, Favorite
 from src.core.polygon_client import obtener_velas_polygon
 from src.core.indicators import calcular_rsi, procesar_indicadores
+from src.core.regla_cruce_hma import regla_cruce_hma
 from src.config import LIMITE_RSI_1D, TIMEZONE_UTC, API_KEY
 from src import config
 import datetime
@@ -187,15 +188,23 @@ async def get_results():
 async def add_to_track(symbols: list[str]):
     db = SessionLocal()
     try:
+        from src.config import LIMITE_RSI_1D
         for symbol in symbols:
             source = db.query(RSI_1D).filter(RSI_1D.symbol == symbol).first()
             if not source: continue
             exists = db.query(StockTracking).filter(StockTracking.symbol == symbol).first()
             if not exists:
                 db.add(StockTracking(
-                    symbol=source.symbol, rsi_value=source.rsi_value, variation=source.variation,
-                    rvol_1=source.rvol_1, rvol_2=source.rvol_2, hma_a=source.hma_a, hma_b=source.hma_b,
-                    min_price=source.min_price, candles_since_min=source.candles_since_min, entry_date=source.entry_date
+                    symbol=source.symbol, 
+                    current_price=source.min_price, # Usamos el precio que disparó como inicial
+                    rsi_value=source.rsi_value, 
+                    variation=source.variation,
+                    rvol_1=source.rvol_1, 
+                    rvol_2=source.rvol_2, 
+                    hma_a=source.hma_a, 
+                    hma_b=source.hma_b,
+                    rsi_limit=LIMITE_RSI_1D,
+                    estado=None
                 ))
         db.commit()
         return {"message": "Símbolos agregados a Track Stock"}
@@ -220,12 +229,19 @@ async def get_track_data():
     db = SessionLocal()
     try:
         favs = db.query(StockTracking).all()
+        # Orden: symbol, current_price, rsi_value, variation, rvol_1, rvol_2, hma_a, hma_b, rsi_limit, estado
         return [
             [
-                f.symbol, f.rvol_1, f.rvol_2, f.variation, f.rsi_value, 
-                f.hma_a, f.hma_b, f.min_price, f.candles_since_min,
-                (f.entry_date + datetime.timedelta(hours=TIMEZONE_UTC)).strftime("%Y-%m-%d") if f.entry_date else "-",
-                f.current_value, f.alert_value, f.alert_direction
+                f.symbol, 
+                f.current_price,
+                f.rsi_value, 
+                f.variation, 
+                f.rvol_1, 
+                f.rvol_2, 
+                f.hma_a, 
+                f.hma_b, 
+                f.rsi_limit,
+                f.estado
             ] for f in favs
         ]
     finally:
@@ -294,12 +310,51 @@ async def update_track_values(data: dict):
     try:
         fav = db.query(StockTracking).filter(StockTracking.symbol == data["symbol"]).first()
         if fav:
-            fav.current_value = float(data["current_value"])
-            fav.alert_value = float(data["alert_value"])
-            fav.alert_direction = data["alert_direction"]
+            # Solo actualizamos los campos que sigan existiendo en el nuevo esquema si es necesario
+            # Por ahora el usuario pidió solo columnas específicas, quizás esto ya no sea tan necesario 
+            # desde el dashboard manual, pero permitimos actualizar el precio o estado si se envía.
+            if "current_price" in data:
+                fav.current_price = float(data["current_price"])
+            if "estado" in data:
+                fav.estado = data["estado"]
             db.commit()
             return {"message": "Actualizado"}
         raise HTTPException(status_code=404, detail="No encontrado")
+    finally:
+        db.close()
+
+@app.post("/api/recalculate_hma")
+async def recalculate_hma():
+    db = SessionLocal()
+    try:
+        tracked_stocks = db.query(StockTracking).all()
+        if not tracked_stocks:
+            return {"message": "No hay stocks en seguimiento para recalcular."}
+            
+        updated_count = 0
+        for stock in tracked_stocks:
+            try:
+                metrics = regla_cruce_hma(stock.symbol)
+                if metrics:
+                    stock.current_price = metrics["current_price"]
+                    stock.rsi_value = metrics["rsi_value"]
+                    stock.variation = metrics["variation"]
+                    stock.rvol_1 = metrics["rvol_1"]
+                    stock.rvol_2 = metrics["rvol_2"]
+                    stock.hma_a = metrics["hma_a"]
+                    stock.hma_b = metrics["hma_b"]
+                    stock.estado = metrics["estado"]
+                    stock.timestamp = datetime.datetime.utcnow()
+                    updated_count += 1
+            except Exception as e:
+                print(f"Error recalculando HMA para {stock.symbol}: {e}")
+                continue
+        
+        db.commit()
+        return {"message": f"HMA recalculado para {updated_count} stocks."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error recalculando HMA: {str(e)}")
     finally:
         db.close()
 

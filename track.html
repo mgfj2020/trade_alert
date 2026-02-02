@@ -112,6 +112,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h3 class="fw-bold mb-0">⭐ Track Stock</h3>
       <div>
+        <button id="btn-hma" class="btn btn-primary btn-sm me-2" onclick="recalculateHMA()">📊 Calcular HMA</button>
         <button class="btn btn-outline-secondary btn-sm" onclick="loadFav()">🔁 Recargar</button>
       </div>
     </div>
@@ -123,15 +124,15 @@
             <tr>
               <th style="width: 50px;">DEL</th>
               <th>Símbolo</th>
-              <th>RVOL 1</th>
-              <th>RVOL 2</th>
-              <th>Var %</th>
+              <th>Precio Actual</th>
               <th>RSI 1D</th>
+              <th>Variación</th>
+              <th>RVOL 1 (Hoy)</th>
+              <th>RVOL 2 (Ayer)</th>
               <th>HMA_A</th>
               <th>HMA_B</th>
-              <th>MÍNIMO</th>
-              <th>VELAS</th>
-              <th>Entry Date</th>
+              <th>Límite RSI</th>
+              <th>Estado</th>
             </tr>
           </thead>
           <tbody id="fav-body"></tbody>
@@ -158,7 +159,12 @@
         colsHtml += `<td><a href="${tvUrl}" target="_blank" class="symbol-link">${symbol}</a></td>`;
 
         for (let i = 1; i <= 9; i++) {
-          colsHtml += `<td>${row[i] ?? "-"}</td>`;
+          let val = row[i] ?? "-";
+          // Formatear variación con % si es el índice 3
+          if (i === 3 && val !== "-") {
+            val = val + "%";
+          }
+          colsHtml += `<td>${val}</td>`;
         }
 
         tr.innerHTML = colsHtml;
@@ -170,6 +176,25 @@
       if (!confirm(`¿Eliminar ${sym}?`)) return;
       await fetch(`/api/track/${sym}`, { method: "DELETE" });
       loadFav();
+    }
+
+    async function recalculateHMA() {
+      const btn = document.getElementById("btn-hma");
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = "⏳ Calculando...";
+
+      try {
+        const r = await fetch("/api/recalculate_hma", { method: "POST" });
+        const d = await r.json();
+        alert(d.message);
+        await loadFav();
+      } catch (e) {
+        alert("Error recalcuando HMA: " + e);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
     }
 
     window.onload = loadFav;

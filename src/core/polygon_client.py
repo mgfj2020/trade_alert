@@ -59,10 +59,26 @@ def obtener_velas_polygon(stock, intervalo, fecha_inicio=None, fecha_fin=None):
     df["datetime"] = pd.to_datetime(df["t"], unit="ms", utc=True)
     return df[["datetime","open","high","low","close","volume"]].copy()
 
-def convertir_a_local_y_filtrar(df, utc_offset=3, market_open="11:30", market_close="18:00"):
+def aplicar_utc_local(df, utc_offset=3):
+    """
+    Convierte el datetime de UTC a local aplicando el offset y lo setea como index.
+    """
     df = df.copy()
     df["datetime"] = pd.to_datetime(df["datetime"], utc=True)
     df["datetime"] = df["datetime"] - pd.Timedelta(hours=utc_offset)
     df["datetime"] = df["datetime"].dt.tz_localize(None)
     df = df.set_index("datetime").sort_index()
+    return df
+
+def filtrar_horario_mercado(df, market_open="11:30", market_close="18:00"):
+    """
+    Filtra el DataFrame para quedarse solo con el horario de mercado especificado.
+    """
     return df.between_time(market_open, market_close).copy()
+
+def convertir_a_local_y_filtrar(df, utc_offset=3, market_open="11:30", market_close="18:00"):
+    """
+    Mantenida por compatibilidad. Usa las nuevas funciones.
+    """
+    df = aplicar_utc_local(df, utc_offset)
+    return filtrar_horario_mercado(df, market_open, market_close)

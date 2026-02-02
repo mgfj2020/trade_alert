@@ -40,18 +40,15 @@ class StockTracking(Base):
     __tablename__ = "stock_tracking"
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String, unique=True, index=True)
+    current_price = Column(Float, default=0.0)
     rsi_value = Column(Float)
     variation = Column(Float)
     rvol_1 = Column(Float)
     rvol_2 = Column(Float)
     hma_a = Column(Float)
     hma_b = Column(Float)
-    min_price = Column(Float)
-    candles_since_min = Column(Integer)
-    entry_date = Column(DateTime)
-    current_value = Column(Float, default=0.0)
-    alert_value = Column(Float, default=-1.0)
-    alert_direction = Column(String, default="debajo")  # "encima" o "debajo"
+    rsi_limit = Column(Float, default=30.0)
+    estado = Column(String, nullable=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Favorite(Base):

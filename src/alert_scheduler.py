@@ -36,26 +36,20 @@ def evaluate_rules():
         
         for fav in stock_tracking_list:
             try:
-                # Obtener velas diarias para calcular precio actual y HMA90
+                # Obtener velas diarias para calcular precio actual
                 df = obtener_velas_polygon(fav.symbol, "1D")
                 if df.empty:
                     continue
                 
                 # Precio actual
                 current_price = float(df["close"].iloc[-1])
-                fav.current_value = current_price
+                fav.current_price = current_price
                 
-                # 1. Validar Alertas de Precio
-                if fav.alert_value != -1.0:
-                    disparado = False
-                    if fav.alert_direction == "encima" and current_price >= fav.alert_value:
-                        disparado = True
-                    elif fav.alert_direction == "debajo" and current_price <= fav.alert_value:
-                        disparado = True
-                    
-                    if disparado:
-                        msg = f"{fav.symbol} esta por {fav.alert_direction} {fav.alert_value}"
-                        alertas_mensajes.append(msg)
+                # Aquí se podrían añadir reglas para el campo 'estado' en el futuro
+                # Por ahora solo actualizamos el precio.
+
+            except Exception as e:
+                print(f"❌ Error evaluando {fav.symbol}: {e}")
 
             except Exception as e:
                 print(f"❌ Error evaluando {fav.symbol}: {e}")

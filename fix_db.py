@@ -14,17 +14,8 @@ def fix_schema():
             
             # --- STOCK_TRACKING ---
             if 'stock_tracking' in tables:
-                columns = [c['name'] for c in inspector.get_columns('stock_tracking')]
-                new_cols = [
-                    ("rsi_value", "FLOAT"), ("variation", "FLOAT"), ("rvol_1", "FLOAT"), ("rvol_2", "FLOAT"),
-                    ("hma_a", "FLOAT"), ("hma_b", "FLOAT"), ("min_price", "FLOAT"), ("candles_since_min", "INTEGER"),
-                    ("entry_date", "TIMESTAMP"), ("timestamp", "TIMESTAMP"), ("current_value", "FLOAT DEFAULT 0.0"),
-                    ("alert_value", "FLOAT DEFAULT -1.0"), ("alert_direction", "VARCHAR DEFAULT 'debajo'")
-                ]
-                for col_name, col_type in new_cols:
-                    if col_name not in columns:
-                        print(f"Añadiendo '{col_name}' a stock_tracking...")
-                        conn.execute(text(f"ALTER TABLE stock_tracking ADD COLUMN {col_name} {col_type}"))
+                print("Recreando stock_tracking para ajustar al nuevo esquema...")
+                conn.execute(text("DROP TABLE stock_tracking"))
 
             # --- FAVORITES ---
             if 'favorites' in tables:
