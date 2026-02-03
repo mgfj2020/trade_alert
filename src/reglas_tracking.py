@@ -60,7 +60,7 @@ def send_tracking_alert(messages):
     
     try:
         response = requests.post(
-            config.STOCK_ALERT,
+            config.HMA_ALERT,
             data=message_body.encode("utf-8"),
             headers={
                 "Title": "HMA Tracking Alert",
