@@ -115,36 +115,40 @@ async def scan_rsi():
                 hma_a = df_1d_proc["hma_a"].iloc[-1]
                 hma_b = df_1d_proc["hma_b"].iloc[-1]
 
-                if rsi <= LIMITE_RSI_1D:
-                    clean_symbol = stock.symbol.strip().upper()
-                    existing_rsi1d = db.query(RSI_1D).filter(RSI_1D.symbol == clean_symbol).first()
+                clean_symbol = stock.symbol.strip().upper()
+                existing_rsi1d = db.query(RSI_1D).filter(RSI_1D.symbol == clean_symbol).first()
+
+                if existing_rsi1d:
+                    # Ya existe, ACTUALIZAMOS sus campos (independiente del RSI actual)
+                    existing_rsi1d.rsi_value = float(round(rsi, 2))
+                    existing_rsi1d.variation = float(round(last_var, 2))
+                    existing_rsi1d.rvol_1 = float(round(rvol_1, 2))
+                    existing_rsi1d.rvol_2 = float(round(rvol_2, 2))
+                    existing_rsi1d.hma_a = float(round(hma_a, 2))
+                    existing_rsi1d.hma_b = float(round(hma_b, 2))
+                    existing_rsi1d.timestamp = datetime.datetime.utcnow()
                     
-                    if not existing_rsi1d:
-                        # Nueva entrada
-                        new_rsi1d = RSI_1D(
-                            symbol=clean_symbol,
-                            rsi_value=float(round(rsi, 2)),
-                            variation=float(round(last_var, 2)),
-                            rvol_1=float(round(rvol_1, 2)),
-                            rvol_2=float(round(rvol_2, 2)),
-                            hma_a=float(round(hma_a, 2)),
-                            hma_b=float(round(hma_b, 2)),
-                            entry_date=datetime.datetime.utcnow(),
-                            min_price=float(last_close),
-                            candles_since_min=0,
-                            timestamp=datetime.datetime.utcnow()
-                        )
-                        db.add(new_rsi1d)
-                        rsi_hits += 1
-                    else:
-                        # Ya existe, lo saltamos según requerimiento
-                        continue
-
-
-
-
-
-                processed_count += 1
+                    # Recalculamos estadísticas basadas en su fecha de entrada original
+                    recalculate_rsi_1d_stats(existing_rsi1d, df_1d_proc)
+                    processed_count += 1
+                elif rsi <= LIMITE_RSI_1D:
+                    # Nueva entrada (solo si rompe el límite)
+                    new_rsi1d = RSI_1D(
+                        symbol=clean_symbol,
+                        rsi_value=float(round(rsi, 2)),
+                        variation=float(round(last_var, 2)),
+                        rvol_1=float(round(rvol_1, 2)),
+                        rvol_2=float(round(rvol_2, 2)),
+                        hma_a=float(round(hma_a, 2)),
+                        hma_b=float(round(hma_b, 2)),
+                        entry_date=datetime.datetime.utcnow(),
+                        min_price=float(last_close),
+                        candles_since_min=0,
+                        timestamp=datetime.datetime.utcnow()
+                    )
+                    db.add(new_rsi1d)
+                    rsi_hits += 1
+                    processed_count += 1
             except Exception as inner_e:
                 print(f"Error procesando {stock.symbol}: {inner_e}")
                 continue
@@ -462,8 +466,13 @@ def recalculate_rsi_1d_stats(entry, df_1d_proc):
     """
     Recalcula min_price y candles_since_min basado en entry_date.
     """
+    # Aseguramos que trabajamos con DatetimeIndex para poder usar .index.date
+    df = df_1d_proc.copy()
+    if "datetime" in df.columns:
+        df = df.set_index("datetime")
+    
     entry_date = entry.entry_date
-    df_hist = df_1d_proc[df_1d_proc.index.date >= entry_date.date()]
+    df_hist = df[df.index.date >= entry_date.date()]
     
     if not df_hist.empty:
         min_row = df_hist.loc[df_hist['close'].idxmin()]
