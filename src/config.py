@@ -5,6 +5,14 @@ load_dotenv()
 
 API_KEY = os.getenv("POLYGON_API_KEY", "YOUR_DEFAULT_API_KEY")
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    print("FATAL: No se encontró DATABASE_URL. Abortando programa...", flush=True)
+    sys.exit(1)
+
+
+
 # Si detectamos que estamos en la nube (Postgres), ajustamos el protocolo si es necesario
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
