@@ -18,5 +18,16 @@ HMA_B = int(os.getenv("HMA_B", 20))
 
 # Horarios de alerta (Días de la semana 0-4 es Lunes-Viernes)
 ALERT_DAYS = [0, 1, 2, 3, 4]
-ALERT_TIME_START = "09:30"
-ALERT_TIME_END = "16:00"
+
+# Usar horas de .env si están disponibles, de lo contrario usar default
+START_HOUR = os.getenv("SCHEDULER_START_HOUR", "09")
+END_HOUR = os.getenv("SCHEDULER_END_HOUR", "16")
+
+# Asegurar formato HH:MM
+if ":" not in START_HOUR:
+    START_HOUR = f"{int(START_HOUR):02d}:00"
+if ":" not in END_HOUR:
+    END_HOUR = f"{int(END_HOUR):02d}:00"
+
+ALERT_TIME_START = os.getenv("ALERT_TIME_START", START_HOUR)
+ALERT_TIME_END = os.getenv("ALERT_TIME_END", END_HOUR)
