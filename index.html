@@ -149,10 +149,10 @@
               <th>Símbolo</th>
               <th>RVOL 1 (1D)</th>
               <th>RVOL 2 (1D)</th>
-              <th>Variación % (1D)</th>
+              <th>Var % (1D)</th>
               <th>RSI 1D</th>
-              <th id="label-hma-a">HMA_A</th>
-              <th id="label-hma-b">HMA_B</th>
+              <th id="label-prom-var">Prom. Var. 3M</th>
+              <th id="label-valor-actual">Valor Actual</th>
               <th>MÍNIMO</th>
               <th>VELAS</th>
               <th>Entry Date</th>
@@ -200,8 +200,9 @@
     async function loadData() {
       const r_conf = await fetch("/api/config");
       const conf = await r_conf.json();
-      document.getElementById("label-hma-a").innerText = `HMA (${conf.HMA_A})`;
-      document.getElementById("label-hma-b").innerText = `HMA (${conf.HMA_B})`;
+      // Ya no usamos etiquetas dinámicas para HMA en esta vista
+      // document.getElementById("label-hma-a").innerText = `HMA (${conf.HMA_A})`;
+      // document.getElementById("label-hma-b").innerText = `HMA (${conf.HMA_B})`;
 
       const r = await fetch("/api/data");
       const d = await r.json();

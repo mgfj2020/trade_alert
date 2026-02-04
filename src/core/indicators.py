@@ -89,11 +89,39 @@ def verificar_estado_rsi(df, limite_bajo=35, limite_techo=45, ventana=15):
     return estado, detalles
 
 def promedio_variacion_3m(df, meses=3):
+    if df.empty:
+        return 0.0
+    
+    # Asegurar que trabajamos con una copia para no afectar el exterior si modificamos el index
+    df = df.copy()
+    
+    # Asegurar DatetimeIndex para que pd.DateOffset funcione correctamente
+    if not isinstance(df.index, pd.DatetimeIndex):
+        if 'datetime' in df.columns:
+            df['datetime'] = pd.to_datetime(df['datetime'])
+            df = df.set_index('datetime')
+        else:
+            # Si no hay forma de tener fecha, no podemos calcular por meses
+            return 0.0
+            
+    if 'var' not in df.columns:
+        return 0.0
+        
     var = df[['var']].dropna()
+    if var.empty:
+        return 0.0
+        
     fecha_fin = var.index.max()
     fecha_inicio = fecha_fin - pd.DateOffset(months=meses)
+    
+    # Filtrar por el rango de fechas
     var_3m = var.loc[fecha_inicio:fecha_fin]
-    return var_3m['var'].abs().mean()
+    
+    if var_3m.empty:
+        return 0.0
+        
+    # Retornar el promedio del valor absoluto de la variación
+    return float(var_3m['var'].abs().mean())
 
 def rvol_time_and_cumulative(df, timeframe_minutes=30, lookback_bars=5, rvol_threshold=1.0):
     df = df.copy()

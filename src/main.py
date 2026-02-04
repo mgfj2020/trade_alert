@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from src.models import SessionLocal, init_db, StockList, RSI_4H, RSI_1D, StockTracking, Favorite
 from src.core.polygon_client import obtener_velas_polygon
-from src.core.indicators import calcular_rsi, procesar_indicadores
+from src.core.indicators import calcular_rsi, procesar_indicadores, promedio_variacion_3m
 from src.core.regla_cruce_hma import regla_cruce_hma
 from src.config import LIMITE_RSI_1D, TIMEZONE_UTC, API_KEY
 from src import config
@@ -112,8 +112,7 @@ async def scan_rsi():
                 rvol_2 = df_1d_proc["rvol"].iloc[-2]
 
                 rsi = df_1d_proc["RSI"].iloc[-1]
-                hma_a = df_1d_proc["hma_a"].iloc[-1]
-                hma_b = df_1d_proc["hma_b"].iloc[-1]
+                prom_var_3m = promedio_variacion_3m(df_1d_proc)
 
                 clean_symbol = stock.symbol.strip().upper()
                 existing_rsi1d = db.query(RSI_1D).filter(RSI_1D.symbol == clean_symbol).first()
@@ -124,8 +123,8 @@ async def scan_rsi():
                     existing_rsi1d.variation = float(round(last_var, 2))
                     existing_rsi1d.rvol_1 = float(round(rvol_1, 2))
                     existing_rsi1d.rvol_2 = float(round(rvol_2, 2))
-                    existing_rsi1d.hma_a = float(round(hma_a, 2))
-                    existing_rsi1d.hma_b = float(round(hma_b, 2))
+                    existing_rsi1d.promedio_variacion_3m = float(round(prom_var_3m, 2))
+                    existing_rsi1d.valor_actual = float(round(last_close, 2))
                     existing_rsi1d.timestamp = datetime.datetime.utcnow()
                     
                     # Recalculamos estadísticas basadas en su fecha de entrada original
@@ -139,8 +138,8 @@ async def scan_rsi():
                         variation=float(round(last_var, 2)),
                         rvol_1=float(round(rvol_1, 2)),
                         rvol_2=float(round(rvol_2, 2)),
-                        hma_a=float(round(hma_a, 2)),
-                        hma_b=float(round(hma_b, 2)),
+                        promedio_variacion_3m=float(round(prom_var_3m, 2)),
+                        valor_actual=float(round(last_close, 2)),
                         entry_date=datetime.datetime.utcnow(),
                         min_price=float(last_close),
                         candles_since_min=0,
@@ -176,8 +175,8 @@ async def get_results():
                 r.rvol_2, 
                 r.variation, 
                 r.rsi_value, 
-                r.hma_a,
-                r.hma_b,
+                r.promedio_variacion_3m,
+                r.valor_actual,
                 r.min_price,
                 r.candles_since_min,
                 (r.entry_date + datetime.timedelta(hours=TIMEZONE_UTC)).strftime("%Y-%m-%d"),
@@ -205,8 +204,8 @@ async def add_to_track(symbols: list[str]):
                     variation=source.variation,
                     rvol_1=source.rvol_1, 
                     rvol_2=source.rvol_2, 
-                    hma_a=source.hma_a, 
-                    hma_b=source.hma_b,
+                    hma_a=0.0, # RSI_1D ya no tiene HMA, pondremos 0 o podríamos recalcular si fuera crítico
+                    hma_b=0.0,
                     rsi_limit=LIMITE_RSI_1D,
                     estado=None
                 ))
@@ -485,6 +484,10 @@ def recalculate_rsi_1d_stats(entry, df_1d_proc):
         
         entry.min_price = min_val
         entry.candles_since_min = int(candles_count)
+        
+        # También recalculamos el promedio_variacion_3m y valor_actual
+        entry.promedio_variacion_3m = float(round(promedio_variacion_3m(df_1d_proc), 2))
+        entry.valor_actual = float(round(df_1d_proc["close"].iloc[-1], 2))
 
 @app.get("/api/config")
 async def get_config():
