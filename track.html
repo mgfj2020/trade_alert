@@ -131,7 +131,8 @@
               <th>RVOL 2 (Ayer)</th>
               <th>HMA_A</th>
               <th>HMA_B</th>
-              <th>Límite RSI</th>
+              <th>Alert Alcista</th>
+              <th>Alert Bajista</th>
               <th>Estado</th>
             </tr>
           </thead>
@@ -154,22 +155,53 @@
         const symbol = row[0];
         const tvUrl = `https://es.tradingview.com/chart/vODPKhks/?symbol=${symbol}`;
 
-        // Technical data (indexes 1 to 9)
+        // row: symbol, current_price, rsi_value, variation, rvol_1, rvol_2, hma_a, hma_b, alert_alcista, alert_bajista, estado
         let colsHtml = `<td><button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="delFav('${symbol}')">×</button></td>`;
         colsHtml += `<td><a href="${tvUrl}" target="_blank" class="symbol-link">${symbol}</a></td>`;
 
-        for (let i = 1; i <= 9; i++) {
+        // Technical data (indexes 1 to 7: current_price, rsi_value, variation, rvol_1, rvol_2, hma_a, hma_b)
+        for (let i = 1; i <= 7; i++) {
           let val = row[i] ?? "-";
-          // Formatear variación con % si es el índice 3
           if (i === 3 && val !== "-") {
             val = val + "%";
           }
           colsHtml += `<td>${val}</td>`;
         }
 
+        // Alerta Alcista (index 8)
+        const alcistaChecked = row[8] ? "checked" : "";
+        colsHtml += `<td>
+          <div class="form-check form-switch d-flex justify-content-center">
+            <input class="form-check-input" type="checkbox" onclick="toggleAlert('${symbol}', 'alert_alcista', this.checked)" ${alcistaChecked} style="cursor: pointer;">
+          </div>
+        </td>`;
+
+        // Alerta Bajista (index 9)
+        const bajistaChecked = row[9] ? "checked" : "";
+        colsHtml += `<td>
+          <div class="form-check form-switch d-flex justify-content-center">
+            <input class="form-check-input" type="checkbox" onclick="toggleAlert('${symbol}', 'alert_bajista', this.checked)" ${bajistaChecked} style="cursor: pointer;">
+          </div>
+        </td>`;
+
+        // Estado (index 10)
+        colsHtml += `<td>${row[10] ?? "-"}</td>`;
+
         tr.innerHTML = colsHtml;
         tb.appendChild(tr);
       });
+    }
+
+    async function toggleAlert(symbol, field, value) {
+      try {
+        await fetch("/api/track/toggle_alert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol, field, value })
+        });
+      } catch (e) {
+        alert("Error al actualizar alerta: " + e);
+      }
     }
 
     async function delFav(sym) {

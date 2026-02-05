@@ -232,7 +232,7 @@ async def get_track_data():
     db = SessionLocal()
     try:
         favs = db.query(StockTracking).all()
-        # Orden: symbol, current_price, rsi_value, variation, rvol_1, rvol_2, hma_a, hma_b, rsi_limit, estado
+        # Orden: symbol, current_price, rsi_value, variation, rvol_1, rvol_2, hma_a, hma_b, alert_alcista, alert_bajista, estado
         return [
             [
                 f.symbol, 
@@ -243,7 +243,8 @@ async def get_track_data():
                 f.rvol_2, 
                 f.hma_a, 
                 f.hma_b, 
-                f.rsi_limit,
+                f.alert_alcista,
+                f.alert_bajista,
                 f.estado
             ] for f in favs
         ]
@@ -340,15 +341,12 @@ async def update_favorite_values(data: dict):
     finally:
         db.close()
 
-@app.post("/api/update_track_values")
+@app.post("/api/track_values")
 async def update_track_values(data: dict):
     db = SessionLocal()
     try:
         fav = db.query(StockTracking).filter(StockTracking.symbol == data["symbol"]).first()
         if fav:
-            # Solo actualizamos los campos que sigan existiendo en el nuevo esquema si es necesario
-            # Por ahora el usuario pidió solo columnas específicas, quizás esto ya no sea tan necesario 
-            # desde el dashboard manual, pero permitimos actualizar el precio o estado si se envía.
             if "current_price" in data:
                 fav.current_price = float(data["current_price"])
             if "estado" in data:
@@ -359,35 +357,88 @@ async def update_track_values(data: dict):
     finally:
         db.close()
 
+@app.post("/api/track/toggle_alert")
+async def toggle_alert(data: dict):
+    # data: { "symbol": "AAPL", "field": "alert_alcista", "value": true }
+    db = SessionLocal()
+    try:
+        stock = db.query(StockTracking).filter(StockTracking.symbol == data["symbol"]).first()
+        if not stock:
+            raise HTTPException(status_code=404, detail="Stock no encontrado en seguimiento")
+        
+        field = data["field"]
+        value = 1 if data["value"] else 0
+        
+        if field == "alert_alcista":
+            stock.alert_alcista = value
+        elif field == "alert_bajista":
+            stock.alert_bajista = value
+        else:
+            raise HTTPException(status_code=400, detail="Campo inválido")
+            
+        db.commit()
+        return {"message": f"Alerta {field} actualizada para {data['symbol']}"}
+    finally:
+        db.close()
+
 @app.post("/api/recalculate_hma")
 async def recalculate_hma():
     db = SessionLocal()
     try:
-        tracked_stocks = db.query(StockTracking).all()
-        if not tracked_stocks:
-            return {"message": "No hay stocks en seguimiento para recalcular."}
+        # 1. Obtener todos los stocks de la tabla RSI_1D
+        rsi_stocks = db.query(RSI_1D).all()
+        if not rsi_stocks:
+            return {"message": "No hay stocks en RSI_1D para analizar."}
             
         updated_count = 0
-        for stock in tracked_stocks:
+        added_count = 0
+        
+        for rsi_stock in rsi_stocks:
+            symbol = rsi_stock.symbol
             try:
-                metrics = regla_cruce_hma(stock.symbol)
-                if metrics:
-                    stock.current_price = metrics["current_price"]
-                    stock.rsi_value = metrics["rsi_value"]
-                    stock.variation = metrics["variation"]
-                    stock.rvol_1 = metrics["rvol_1"]
-                    stock.rvol_2 = metrics["rvol_2"]
-                    stock.hma_a = metrics["hma_a"]
-                    stock.hma_b = metrics["hma_b"]
-                    stock.estado = metrics["estado"]
-                    stock.timestamp = datetime.datetime.utcnow()
-                    updated_count += 1
+                metrics = regla_cruce_hma(symbol)
+                if not metrics:
+                    continue
+                
+                # REGLA: Solo guardamos/actualizamos si HMA_A >= HMA_B
+                if metrics["hma_a"] >= metrics["hma_b"]:
+                    # Buscar si ya existe en stock_tracking
+                    track_entry = db.query(StockTracking).filter(StockTracking.symbol == symbol).first()
+                    
+                    if track_entry:
+                        # Actualizar existente
+                        track_entry.current_price = metrics["current_price"]
+                        track_entry.rsi_value = metrics["rsi_value"]
+                        track_entry.variation = metrics["variation"]
+                        track_entry.rvol_1 = metrics["rvol_1"]
+                        track_entry.rvol_2 = metrics["rvol_2"]
+                        track_entry.hma_a = metrics["hma_a"]
+                        track_entry.hma_b = metrics["hma_b"]
+                        track_entry.estado = metrics["estado"]
+                        track_entry.timestamp = datetime.datetime.utcnow()
+                        updated_count += 1
+                    else:
+                        # Crear nuevo registro en stock_tracking
+                        db.add(StockTracking(
+                            symbol=symbol,
+                            current_price=metrics["current_price"],
+                            rsi_value=metrics["rsi_value"],
+                            variation=metrics["variation"],
+                            rvol_1=metrics["rvol_1"],
+                            rvol_2=metrics["rvol_2"],
+                            hma_a=metrics["hma_a"],
+                            hma_b=metrics["hma_b"],
+                            rsi_limit=LIMITE_RSI_1D, # Usamos el límite global
+                            estado=metrics["estado"]
+                        ))
+                        added_count += 1
+                
             except Exception as e:
-                print(f"Error recalculando HMA para {stock.symbol}: {e}")
+                print(f"Error recalculando HMA para {symbol}: {e}")
                 continue
         
         db.commit()
-        return {"message": f"HMA recalculado para {updated_count} stocks."}
+        return {"message": f"Proceso HMA completado. {added_count} nuevos en seguimiento, {updated_count} actualizados."}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error recalculando HMA: {str(e)}")

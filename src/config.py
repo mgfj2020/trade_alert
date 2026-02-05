@@ -21,6 +21,8 @@ LIMITE_RSI_1D = float(os.getenv("LIMITE_RSI_1D", 30))
 
 STOCK_ALERT = str(os.getenv("STOCK_ALERT", "https://ntfy.sh/mg_alert_2026"))
 HMA_ALERT = str(os.getenv("HMA_ALERT", "https://ntfy.sh/mg_regla1_2026"))
+HMA_ALCISTA = str(os.getenv("HMA_ALCISTA", "ntfy.sh/mg_hma_alcista"))
+HMA_BAJISTA = str(os.getenv("HMA_BAJISTA", "ntfy.sh/mg_hma_bajista"))
 
 
 TIMEZONE_UTC = int(os.getenv("TIMEZONE_UTC", 0))
