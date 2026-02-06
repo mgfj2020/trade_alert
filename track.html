@@ -111,7 +111,12 @@
   <div class="container pb-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h3 class="fw-bold mb-0">⭐ Track Stock</h3>
-      <div>
+      <div class="d-flex align-items-center">
+        <div class="input-group input-group-sm me-3" style="max-width: 250px;">
+          <input type="text" id="manual-symbol" class="form-control" placeholder="Símbolo (ej: AAPL)"
+            onkeypress="if(event.key==='Enter') addManualTrack()">
+          <button class="btn btn-success" type="button" onclick="addManualTrack()">+ Agregar</button>
+        </div>
         <button id="btn-hma" class="btn btn-primary btn-sm me-2" onclick="recalculateHMA()">📊 Calcular HMA</button>
         <button class="btn btn-outline-secondary btn-sm" onclick="loadFav()">🔁 Recargar</button>
       </div>
@@ -226,6 +231,32 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
+      }
+    }
+
+    async function addManualTrack() {
+      const input = document.getElementById("manual-symbol");
+      const symbol = input.value.trim().toUpperCase();
+      if (!symbol) {
+        alert("Por favor ingrese un símbolo");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/add_manual_track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          input.value = "";
+          loadFav();
+        } else {
+          alert("Error: " + data.detail);
+        }
+      } catch (e) {
+        alert("Error al agregar stock: " + e);
       }
     }
 

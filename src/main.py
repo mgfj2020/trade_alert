@@ -341,6 +341,53 @@ async def update_favorite_values(data: dict):
     finally:
         db.close()
 
+@app.post("/api/add_manual_track")
+async def add_manual_track(data: dict):
+    # data: { "symbol": "TSLA" }
+    db = SessionLocal()
+    try:
+        symbol = data["symbol"].strip().upper()
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Símbolo inválido")
+            
+        metrics = regla_cruce_hma(symbol)
+        if not metrics:
+            raise HTTPException(status_code=404, detail=f"No se pudo obtener datos para {symbol}")
+            
+        exists = db.query(StockTracking).filter(StockTracking.symbol == symbol).first()
+        if exists:
+            exists.current_price = metrics["current_price"]
+            exists.rsi_value = metrics["rsi_value"]
+            exists.variation = metrics["variation"]
+            exists.rvol_1 = metrics["rvol_1"]
+            exists.rvol_2 = metrics["rvol_2"]
+            exists.hma_a = metrics["hma_a"]
+            exists.hma_b = metrics["hma_b"]
+            exists.estado = metrics["estado"]
+            exists.timestamp = datetime.datetime.utcnow()
+        else:
+            db.add(StockTracking(
+                symbol=symbol,
+                current_price=metrics["current_price"],
+                rsi_value=metrics["rsi_value"],
+                variation=metrics["variation"],
+                rvol_1=metrics["rvol_1"],
+                rvol_2=metrics["rvol_2"],
+                hma_a=metrics["hma_a"],
+                hma_b=metrics["hma_b"],
+                rsi_limit=LIMITE_RSI_1D,
+                estado=metrics["estado"]
+            ))
+        db.commit()
+        return {"message": f"{symbol} agregado/actualizado en seguimiento"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
 @app.post("/api/track_values")
 async def update_track_values(data: dict):
     db = SessionLocal()
