@@ -37,14 +37,14 @@ def send_alert(messages):
             }
         )
         if response.status_code == 200:
-            print(f"🚀 Alertas enviadas (Bullish):\n{message_body}")
+            if config.PRINT_OUTPUT:
+                print(f"🚀 Alertas enviadas (Bullish):\n{message_body}")
         else:
             print(f"⚠️ Alerta enviada pero el servidor respondió {response.status_code}: {response.text}")
     except Exception as e:
         print(f"❌ Error enviando alerta: {e}")
 
 def run_hma_scan():
-    print(f"[{datetime.datetime.now()}] Iniciando escaneo de recuperación HMA (ALCISTA)...")
     init_db()
     db = SessionLocal()
     
@@ -53,15 +53,21 @@ def run_hma_scan():
     try:
         # 1. Obtener todos los stocks de la tabla RSI_1D
         rsi_stocks = db.query(RSI_1D).all()
+        total_rsi_stocks = len(rsi_stocks)
+        
+        print(f"[{datetime.datetime.now()}] Inicio ejecución | Total a procesar: {total_rsi_stocks}")
+        
         if not rsi_stocks:
-            print("No hay stocks en RSI_1D para analizar.")
+            if config.PRINT_OUTPUT:
+                print("No hay stocks en RSI_1D para analizar.")
+            print(f"[{datetime.datetime.now()}] Finalización ejecución")
             return
             
         updated_count = 0
         added_count = 0
-        total_rsi_stocks = len(rsi_stocks)
         
-        print(f"Analizando {total_rsi_stocks} candidatos de la tabla RSI_1D...\n")
+        if config.PRINT_OUTPUT:
+            print(f"Analizando {total_rsi_stocks} candidatos de la tabla RSI_1D...\n")
         
         for rsi_stock in rsi_stocks:
             symbol = rsi_stock.symbol.strip().upper()
@@ -89,7 +95,8 @@ def run_hma_scan():
                         track_entry.estado = metrics["estado"]
                         track_entry.timestamp = datetime.datetime.utcnow()
                         updated_count += 1
-                        print(f" [ACTUALIZADO] {symbol}: Cruce alcista detectado.")
+                        if config.PRINT_OUTPUT:
+                            print(f" [ACTUALIZADO] {symbol}: Cruce alcista detectado.")
                         
                         # Alerta si está habilitada
                         if track_entry.alert_alcista == 1:
@@ -112,7 +119,8 @@ def run_hma_scan():
                         )
                         db.add(new_track)
                         added_count += 1
-                        print(f" [NUEVO TRACK] {symbol}: Agregado a seguimiento.")
+                        if config.PRINT_OUTPUT:
+                            print(f" [NUEVO TRACK] {symbol}: Agregado a seguimiento.")
                         
                         # Alertas para nuevos registros están habilitadas por defecto (alert_alcista=1)
                         alerts_to_send.append(alert_message)
@@ -131,8 +139,9 @@ def run_hma_scan():
         if alerts_to_send:
             send_alert(alerts_to_send)
 
-        print(f"\n[{datetime.datetime.now()}] Proceso HMA ALCISTA completado.")
-        print(f"Resumen: {added_count} nuevos en seguimiento activo, {updated_count} actualizados.")
+        print(f"[{datetime.datetime.now()}] Finalización ejecución")
+        if config.PRINT_OUTPUT:
+            print(f"Resumen: {added_count} nuevos en seguimiento activo, {updated_count} actualizados.")
         
     except Exception as e:
         db.rollback()

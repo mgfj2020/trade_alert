@@ -44,3 +44,6 @@ if ":" not in END_HOUR:
 
 ALERT_TIME_START = os.getenv("ALERT_TIME_START", START_HOUR)
 ALERT_TIME_END = os.getenv("ALERT_TIME_END", END_HOUR)
+
+PRINT_OUTPUT = os.getenv("PRINT_OUTPUT", "FALSE").upper() == "TRUE"
+

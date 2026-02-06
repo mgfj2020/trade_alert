@@ -9,6 +9,7 @@ sys.path.append(os.getcwd())
 from src.models import SessionLocal, init_db, StockList, RSI_1D
 from src.core.polygon_client import obtener_velas_polygon
 from src.core.indicators import procesar_indicadores, promedio_variacion_3m
+from src import config
 from src.config import LIMITE_RSI_1D, TIMEZONE_UTC
 
 def recalculate_rsi_1d_stats(entry, df_1d_proc):
@@ -41,14 +42,19 @@ def recalculate_rsi_1d_stats(entry, df_1d_proc):
         entry.valor_actual = float(round(df_1d_proc["close"].iloc[-1], 2))
 
 def run_scan():
-    print(f"[{datetime.datetime.now()}] Iniciando escaneo RSI_1D...")
     init_db()
     db = SessionLocal()
     
     try:
         stocks = db.query(StockList).all()
+        total_stocks = len(stocks)
+        
+        print(f"[{datetime.datetime.now()}] Inicio ejecución | Total a procesar: {total_stocks}")
+        
         if not stocks:
-            print("No hay stocks en la lista para escanear.")
+            if config.PRINT_OUTPUT:
+                print("No hay stocks en la lista para escanear.")
+            print(f"[{datetime.datetime.now()}] Finalización ejecución")
             return
             
         processed_count = 0
@@ -60,7 +66,8 @@ def run_scan():
                 # 1. Obtener data 1D para Variación y RVOL
                 df_1d = obtener_velas_polygon(symbol, "1D")
                 if df_1d.empty or len(df_1d) < 20: 
-                    print(f"Skipping {symbol}: insuficiente data.")
+                    if config.PRINT_OUTPUT:
+                        print(f"Skipping {symbol}: insuficiente data.")
                     continue
                 
                 df_1d_proc = procesar_indicadores(df_1d)
@@ -73,12 +80,12 @@ def run_scan():
                 # RVOLs 1D
                 rvol_1 = df_1d_proc["rvol"].iloc[-1]
                 rvol_2 = df_1d_proc["rvol"].iloc[-2]
-
+ 
                 rsi = df_1d_proc["RSI"].iloc[-1]
                 prom_var_3m = promedio_variacion_3m(df_1d_proc)
-
+ 
                 existing_rsi1d = db.query(RSI_1D).filter(RSI_1D.symbol == symbol).first()
-
+ 
                 if existing_rsi1d:
                     # Ya existe, ACTUALIZAMOS sus campos
                     existing_rsi1d.rsi_value = float(round(rsi, 2))
@@ -92,7 +99,8 @@ def run_scan():
                     # Recalculamos estadísticas basadas en su fecha de entrada original
                     recalculate_rsi_1d_stats(existing_rsi1d, df_1d_proc)
                     processed_count += 1
-                    print(f"Actualizado: {symbol} (RSI: {rsi:.2f})")
+                    if config.PRINT_OUTPUT:
+                        print(f"Actualizado: {symbol} (RSI: {rsi:.2f})")
                 elif rsi <= LIMITE_RSI_1D:
                     # Nueva entrada
                     new_rsi1d = RSI_1D(
@@ -111,7 +119,8 @@ def run_scan():
                     db.add(new_rsi1d)
                     rsi_hits += 1
                     processed_count += 1
-                    print(f"HURRA! Nuevo hit: {symbol} (RSI: {rsi:.2f})")
+                    if config.PRINT_OUTPUT:
+                        print(f"HURRA! Nuevo hit: {symbol} (RSI: {rsi:.2f})")
                 else:
                     processed_count += 1
                     
@@ -120,8 +129,9 @@ def run_scan():
                 continue
         
         db.commit()
-        print(f"\n[{datetime.datetime.now()}] Escaneo completado.")
-        print(f"Resumen: {processed_count} stocks analizados, {rsi_hits} registros nuevos en RSI_1D (Límite RSI: {LIMITE_RSI_1D})")
+        print(f"[{datetime.datetime.now()}] Finalización ejecución")
+        if config.PRINT_OUTPUT:
+            print(f"Resumen: {processed_count} stocks analizados, {rsi_hits} registros nuevos en RSI_1D (Límite RSI: {LIMITE_RSI_1D})")
         
     except Exception as e:
         db.rollback()

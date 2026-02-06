@@ -35,14 +35,14 @@ def send_alert(messages):
             }
         )
         if response.status_code == 200:
-            print(f"📉 Alertas enviadas (Bearish):\n{message_body}")
+            if config.PRINT_OUTPUT:
+                print(f"📉 Alertas enviadas (Bearish):\n{message_body}")
         else:
             print(f"⚠️ Alerta enviada pero el servidor respondió {response.status_code}: {response.text}")
     except Exception as e:
         print(f"❌ Error enviando alerta: {e}")
 
 def run_bearish_scan():
-    print(f"[{datetime.datetime.now()}] Iniciando monitoreo de caídas (HMA BAJISTA)...")
     init_db()
     db = SessionLocal()
     
@@ -51,14 +51,20 @@ def run_bearish_scan():
     try:
         # 1. Obtener todos los stocks que están actualmente en seguimiento (StockTracking)
         tracked_stocks = db.query(StockTracking).all()
+        total_tracked = len(tracked_stocks)
+        
+        print(f"[{datetime.datetime.now()}] Inicio ejecución | Total a procesar: {total_tracked}")
+        
         if not tracked_stocks:
-            print("No hay stocks en seguimiento activo para analizar.")
+            if config.PRINT_OUTPUT:
+                print("No hay stocks en seguimiento activo para analizar.")
+            print(f"[{datetime.datetime.now()}] Finalización ejecución")
             return
             
         bearish_alerts_count = 0
-        total_tracked = len(tracked_stocks)
         
-        print(f"Monitoreando {total_tracked} activos en seguimiento activo...\n")
+        if config.PRINT_OUTPUT:
+            print(f"Monitoreando {total_tracked} activos en seguimiento activo...\n")
         
         for stock in tracked_stocks:
             symbol = stock.symbol.strip().upper()
@@ -80,7 +86,8 @@ def run_bearish_scan():
                 
                 # REGLA: Detectar tendencia bajista (Cruce Bajista)
                 if metrics["hma_a"] < metrics["hma_b"]:
-                    print(f" [ALERTA BAJISTA] {symbol}: Tendencia negativa detectada.")
+                    if config.PRINT_OUTPUT:
+                        print(f" [ALERTA BAJISTA] {symbol}: Tendencia negativa detectada.")
                     
                     # Alerta si está habilitada en la base de datos
                     if stock.alert_bajista == 1:
@@ -98,8 +105,9 @@ def run_bearish_scan():
         if alerts_to_send:
             send_alert(alerts_to_send)
 
-        print(f"\n[{datetime.datetime.now()}] Monitoreo HMA BAJISTA completado.")
-        print(f"Resumen: {total_tracked} activos revisados, {bearish_alerts_count} alertas disparadas.")
+        print(f"[{datetime.datetime.now()}] Finalización ejecución")
+        if config.PRINT_OUTPUT:
+            print(f"Resumen: {total_tracked} activos revisados, {bearish_alerts_count} alertas disparadas.")
         
     except Exception as e:
         db.rollback()
